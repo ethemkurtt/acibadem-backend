@@ -14,14 +14,12 @@ exports.importFromJson = async (req, res) => {
     let addedCountries = 0;
 
     for (const region of regions) {
-      // Bölgeyi bul veya oluştur
       let bolge = await Bolge.findOne({ ad: region.bolge });
       if (!bolge) {
         bolge = await Bolge.create({ ad: region.bolge });
         addedRegions++;
       }
 
-      // Ülkeleri ekle
       for (const country of region.ulkeler) {
         const exists = await Ulke.findOne({ ad: country, bolgeId: bolge._id });
         if (!exists) {
@@ -59,11 +57,7 @@ exports.createBolge = async (req, res) => {
 
 exports.updateBolge = async (req, res) => {
   try {
-    const bolge = await Bolge.findByIdAndUpdate(
-      req.params.id,
-      { ad: req.body.ad },
-      { new: true }
-    );
+    const bolge = await Bolge.findByIdAndUpdate(req.params.id, { ad: req.body.ad }, { new: true });
     if (!bolge) return res.status(404).json({ message: "Bölge bulunamadı" });
     res.json(bolge);
   } catch (err) {
@@ -74,7 +68,7 @@ exports.updateBolge = async (req, res) => {
 exports.deleteBolge = async (req, res) => {
   const bolge = await Bolge.findByIdAndDelete(req.params.id);
   if (!bolge) return res.status(404).json({ message: "Bölge bulunamadı" });
-  await Ulke.deleteMany({ bolgeId: bolge._id }); // bölge silinirse ülkeler de silinir
+  await Ulke.deleteMany({ bolgeId: bolge._id });
   res.json({ message: "Bölge ve bağlı ülkeler silindi" });
 };
 

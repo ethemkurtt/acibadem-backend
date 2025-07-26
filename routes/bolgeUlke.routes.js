@@ -2,16 +2,16 @@ const express = require("express");
 const router = express.Router();
 const c = require("../controllers/bolgeUlke.controller");
 
-// ✅ JSON Import
+// JSON'dan yükleme
 router.post("/import-json", c.importFromJson);
 
-// ✅ Bölgeler
+// Bölgeler
 router.get("/bolgeler", c.getBolgeler);
 router.post("/bolgeler", c.createBolge);
 router.put("/bolgeler/:id", c.updateBolge);
 router.delete("/bolgeler/:id", c.deleteBolge);
 
-// ✅ Ülkeler
+// Ülkeler
 router.get("/ulkeler", c.getUlkeler);
 router.get("/ulkeler/:id", c.getUlkeById);
 router.post("/ulkeler", c.createUlke);

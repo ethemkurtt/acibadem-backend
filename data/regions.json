@@ -1,47 +1,129 @@
 [
   {
     "bolge": "Sub Sahara Bölgesi",
-    "ulkeler": ["Kamerun", "Burkina Faso", "Fildişi", "Mali"]
+    "ulkeler": [
+      "Kamerun",
+      "Burkina Faso",
+      "Fildişi",
+      "Mali"
+    ]
   },
   {
     "bolge": "Orta Doğu Bölgesi",
-    "ulkeler": ["Irak", "Ürdün", "Lübnan", "Filistin", "Bahreyn", "BAE", "Kuveyt", "Omman", "Suudi Arabistan"]
+    "ulkeler": [
+      "Irak",
+      "Ürdün",
+      "Lübnan",
+      "Filistin",
+      "Bahreyn",
+      "BAE",
+      "Kuveyt",
+      "Omman",
+      "Suudi Arabistan"
+    ]
   },
   {
     "bolge": "Kuzey Doğu Afrika Bölgesi",
     "ulkeler": [
-      "Endonezya", "Somali", "Tanzanya", "Kenya", "Uganda", "Ruanda",
-      "Libya", "Mısır", "Sudan",
-      "Pakistan", "Hindistan", "Bengladeş", "Maldiv Adaları", "Seyşeller", "Mauiritus",
-      "İran", "Afganistan", "Çin",
+      "Endonezya",
+      "Somali",
+      "Tanzanya",
+      "Kenya",
+      "Uganda",
+      "Ruanda",
+      "Libya",
+      "Mısır",
+      "Sudan",
+      "Pakistan",
+      "Hindistan",
+      "Bengladeş",
+      "Maldiv Adaları",
+      "Seyşeller",
+      "Mauiritus",
+      "İran",
+      "Afganistan",
+      "Çin",
       "Etiyopya"
     ]
   },
   {
     "bolge": "Magreb Bölgesi",
-    "ulkeler": ["Fransa", "Kanada", "Cezayir", "Tunus", "Fas", "Cibuti", "Kongo"]
+    "ulkeler": [
+      "Fransa",
+      "Kanada",
+      "Cezayir",
+      "Tunus",
+      "Fas",
+      "Cibuti",
+      "Kongo"
+    ]
   },
   {
     "bolge": "Orta Asya Bölgesi",
-    "ulkeler": ["Kazakistan", "Özbekistan", "Kırgızistan", "Moğolistan"]
+    "ulkeler": [
+      "Kazakistan",
+      "Özbekistan",
+      "Kırgızistan",
+      "Moğolistan"
+    ]
   },
-  { "bolge": "Gürcistan Bölgesi", "ulkeler": ["Gürcistan"] },
-  { "bolge": "Ukrayna Bölgesi", "ulkeler": ["Ukrayna"] },
-  { "bolge": "Azerbaycan Bölgesi", "ulkeler": ["Azerbaycan"] },
+  {
+    "bolge": "Gürcistan Bölgesi",
+    "ulkeler": [
+      "Gürcistan"
+    ]
+  },
+  {
+    "bolge": "Ukrayna Bölgesi",
+    "ulkeler": [
+      "Ukrayna"
+    ]
+  },
+  {
+    "bolge": "Azerbaycan Bölgesi",
+    "ulkeler": [
+      "Azerbaycan"
+    ]
+  },
   {
     "bolge": "Rusya Bölgesi",
-    "ulkeler": ["Rusya Federasyonu", "Türkmenistan"]
+    "ulkeler": [
+      "Rusya Federasyonu",
+      "Türkmenistan"
+    ]
   },
   {
     "bolge": "Balkan Bölgesi",
-    "ulkeler": ["Arnavutluk", "Kosova", "Makedonya", "Bulgaristan", "Hırvatistan", "Slovenya", "Karadağ", "Bosna", "Sırbistan"]
+    "ulkeler": [
+      "Arnavutluk",
+      "Kosova",
+      "Makedonya",
+      "Bulgaristan",
+      "Hırvatistan",
+      "Slovenya",
+      "Karadağ",
+      "Bosna",
+      "Sırbistan"
+    ]
   },
   {
     "bolge": "Batı Avrupa Bölgesi",
-    "ulkeler": ["İsviçre", "Almanya", "İngiltere", "İtalya", "İspanya"]
+    "ulkeler": [
+      "İsviçre",
+      "Almanya",
+      "İngiltere",
+      "İtalya",
+      "İspanya"
+    ]
   },
   {
     "bolge": "Doğu Avrupa Bölgesi",
-    "ulkeler": ["Timisoara", "Bükreş", "Köstence", "Iasi", "Moldova"]
+    "ulkeler": [
+      "Timisoara",
+      "Bükreş",
+      "Köstence",
+      "Iasi",
+      "Moldova"
+    ]
   }
 ]
