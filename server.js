@@ -45,7 +45,8 @@ app.use("/api", userRoutes);
 const roleRoutes = require("./routes/role.routes");
 app.use("/api/roles", roleRoutes);
 app.use(express.json());
-
+const bolgeUlkeRoutes = require("./routes/bolgeUlke.routes");
+app.use("/api", bolgeUlkeRoutes);
 // Route tanımı
 app.use("/api/vehicles", vehicleRoutes);
 // 🧠 MongoDB Bağlantısı
