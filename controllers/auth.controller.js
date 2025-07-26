@@ -36,7 +36,7 @@ exports.login = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
-
+// test
     // ✅ Başarıyla dön
     res.json({
       message: "Giriş başarılı.",
