@@ -1,88 +1,75 @@
 const path = require("path");
-const mongoose = require("mongoose");
 const fs = require("fs");
+const mongoose = require("mongoose");
 
 const HastaTalep = require("../models/hastaTalepModels/hastaTalep.model");
 const Companions = require("../models/hastaTalepModels/companions.model");
 const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 const Routes = require("../models/hastaTalepModels/routes.model");
 
-// POST - Talep Oluştur
+// 📌 Dosya kaydetme yardımcı fonksiyonu
+const saveFileInfo = (file, folder) => {
+  if (!file) return null;
+  const uploadPath = `/uploads/${folder}/${Date.now()}-${file.originalname}`;
+  const targetPath = path.join(__dirname, "../../public", uploadPath);
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.renameSync(file.path, targetPath);
+
+  return { fileName: file.originalname, filePath: uploadPath };
+};
+
+// 📌 Tek route kaydı oluşturma
+const createRouteRecord = async (hastaId, routeData) => {
+  const processSide = async (side) => {
+    if (!routeData[side]) return null;
+
+    const sideData = { ...routeData[side] };
+
+    // Dosyalar varsa kaydet
+    if (routeData[side].ticketFile) {
+      sideData.ticket = saveFileInfo(routeData[side].ticketFile, "tickets");
+    }
+
+    if (routeData[side].passportFiles?.length) {
+      sideData.passport = routeData[side].passportFiles.map((file) =>
+        saveFileInfo(file, "passports")
+      );
+    }
+
+    return sideData;
+  };
+
+  return await Routes.create({
+    hastaId,
+    pickup: await processSide("pickup"),
+    drop: await processSide("drop"),
+  });
+};
+
+// ✅ POST - Yeni Talep Oluştur
 exports.createHastaTalep = async (req, res) => {
   try {
-    const {
-      fullName,
-      passportNo,
-      phone,
-      country,
-      language,
-      wheelchair,
-      lokasyon,
-      kategori,
-      transferType,
-      flightCode,
-      gelisHavalimani,
-      kalkisSaati,
-      inisSaati,
-      baggageCount,
-      donusHavalimani,
-      donusKalkisSaati,
-      donusInisSaati,
-      donusBaggageCount,
-      companions,
-      routes,
-      notificationPerson,
-      requestType,
-    } = req.body;
+    const { companions = [], routes = [], notificationPerson, ...talepData } =
+      req.body;
 
-    // 1. Talep oluştur
-    const newTalep = await HastaTalep.create({
-      requestType,
-      fullName,
-      passportNo,
-      phone,
-      country,
-      language,
-      wheelchair,
-      lokasyon,
-      kategori,
-      transferType,
-      flightCode,
-      gelisHavalimani,
-      kalkisSaati,
-      inisSaati,
-      baggageCount,
-      donusHavalimani,
-      donusKalkisSaati,
-      donusInisSaati,
-      donusBaggageCount,
-    });
+    // 1️⃣ Hasta Talep kaydı oluştur
+    const newTalep = await HastaTalep.create(talepData);
 
-    // 2. Refakatçiler
-    const companionIds = [];
-    if (companions?.length) {
-      for (const comp of companions) {
-        const saved = await Companions.create({
-          ...comp,
-          hastaId: newTalep._id,
-        });
-        companionIds.push(saved._id);
-      }
-    }
+    // 2️⃣ Companions ekle
+    const companionIds = await Promise.all(
+      companions.map(async (c) => {
+        const saved = await Companions.create({ ...c, hastaId: newTalep._id });
+        return saved._id;
+      })
+    );
 
-    // 3. Güzergah
-    const routeIds = [];
-    if (routes?.length) {
-      for (const r of routes) {
-        const saved = await Routes.create({
-          ...r,
-          hastaId: newTalep._id,
-        });
-        routeIds.push(saved._id);
-      }
-    }
+    // 3️⃣ Routes ekle (dosyalarla birlikte)
+    const routeIds = await Promise.all(
+      routes.map((r) => createRouteRecord(newTalep._id, r))
+    ).then((records) => records.map((r) => r._id));
 
-    // 4. Bilgilendirilecek kişi
+    // 4️⃣ Notification Person ekle
     let notificationId = null;
     if (notificationPerson) {
       const saved = await NotificationPerson.create({
@@ -92,7 +79,7 @@ exports.createHastaTalep = async (req, res) => {
       notificationId = saved._id;
     }
 
-    // 5. Güncelle talebi
+    // 5️⃣ Talep güncelle
     newTalep.companions = companionIds;
     newTalep.routes = routeIds;
     newTalep.notificationPerson = notificationId;
@@ -100,12 +87,12 @@ exports.createHastaTalep = async (req, res) => {
 
     res.status(201).json(newTalep);
   } catch (err) {
-    console.error("Hasta Talep Hatası:", err);
+    console.error("❌ Hasta Talep Hatası:", err);
     res.status(500).json({ error: "Bir hata oluştu." });
   }
 };
 
-// GET - Tüm Talepleri Getir
+// ✅ GET - Tüm Talepler
 exports.getAllHastaTalepleri = async (req, res) => {
   try {
     const list = await HastaTalep.find()
@@ -118,71 +105,50 @@ exports.getAllHastaTalepleri = async (req, res) => {
   }
 };
 
-// GET - Tek Talep
+// ✅ GET - Tek Talep
 exports.getHastaTalepById = async (req, res) => {
   try {
-    const id = req.params.id; // ← Burası eksikti
-    const talep = await HastaTalep.findById(id)
-      .populate("country", "ad")
-      .populate("gelisHavalimani", "adi")
-      .populate("donusHavalimani", "adi")
+    const talep = await HastaTalep.findById(req.params.id)
       .populate("companions")
       .populate("routes")
       .populate("notificationPerson");
-    console.log(talep);
-    if (!talep) {
-      return res.status(404).json({ error: "Talep bulunamadı." });
-    }
 
-    res.status(200).json(talep);
+    if (!talep) return res.status(404).json({ error: "Talep bulunamadı." });
+
+    res.json(talep);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    res.status(500).json({ error: "Sunucu hatası", details: err.message });
   }
 };
 
-// DELETE - Talep Sil
-exports.deleteHastaTalep = async (req, res) => {
-  try {
-    const id = req.params.id;
-    await Companions.deleteMany({ hastaId: id });
-    await Routes.deleteMany({ hastaId: id });
-    await NotificationPerson.deleteMany({ hastaId: id });
-    await HastaTalep.findByIdAndDelete(id);
-    res.json({ message: "Talep ve ilişkili veriler silindi" });
-  } catch (err) {
-    res.status(500).json({ error: "Silme hatası", details: err.message });
-  }
-};
-
-// PUT - Talep Güncelle
+// ✅ PUT - Talep Güncelle
 exports.updateHastaTalep = async (req, res) => {
   try {
     const id = req.params.id;
-    const { companions = [], routes = [], notificationPerson = {} } = req.body;
+    const { companions = [], routes = [], notificationPerson, ...talepData } =
+      req.body;
 
-    // Mevcut alt verileri temizle
+    // Eski alt verileri sil
     await Promise.all([
       Companions.deleteMany({ hastaId: id }),
       Routes.deleteMany({ hastaId: id }),
       NotificationPerson.deleteMany({ hastaId: id }),
     ]);
 
-    // Yeni alt verileri tekrar ekle
-    const companionIds = [];
-    for (const c of companions) {
-      const saved = await Companions.create({ hastaId: id, ...c });
-      companionIds.push(saved._id);
-    }
+    // Yeni alt verileri ekle
+    const companionIds = await Promise.all(
+      companions.map(async (c) => {
+        const saved = await Companions.create({ hastaId: id, ...c });
+        return saved._id;
+      })
+    );
 
-    const routeIds = [];
-    for (const r of routes) {
-      const saved = await Routes.create({ hastaId: id, ...r });
-      routeIds.push(saved._id);
-    }
+    const routeIds = await Promise.all(
+      routes.map((r) => createRouteRecord(id, r))
+    ).then((records) => records.map((r) => r._id));
 
     let notificationId = null;
-    if (notificationPerson && typeof notificationPerson === "object") {
+    if (notificationPerson) {
       const saved = await NotificationPerson.create({
         hastaId: id,
         ...notificationPerson,
@@ -190,15 +156,10 @@ exports.updateHastaTalep = async (req, res) => {
       notificationId = saved._id;
     }
 
-    // Talep güncelle
+    // Talebi güncelle
     const updated = await HastaTalep.findByIdAndUpdate(
       id,
-      {
-        ...req.body,
-        companions: companionIds,
-        routes: routeIds,
-        notificationPerson: notificationId,
-      },
+      { ...talepData, companions: companionIds, routes: routeIds, notificationPerson: notificationId },
       { new: true }
     );
 
@@ -208,17 +169,19 @@ exports.updateHastaTalep = async (req, res) => {
   }
 };
 
-// DELETE - Tümünü Temizle (Geliştirme/Test Amaçlı)
-exports.clearAllHastaTalepleri = async (req, res) => {
+// ✅ DELETE - Talep Sil
+exports.deleteHastaTalep = async (req, res) => {
   try {
+    const id = req.params.id;
     await Promise.all([
-      Companions.deleteMany({}),
-      Routes.deleteMany({}),
-      NotificationPerson.deleteMany({}),
-      HastaTalep.deleteMany({}),
+      Companions.deleteMany({ hastaId: id }),
+      Routes.deleteMany({ hastaId: id }),
+      NotificationPerson.deleteMany({ hastaId: id }),
+      HastaTalep.findByIdAndDelete(id),
     ]);
-    res.json({ message: "Tüm talepler ve ilişkili veriler temizlendi." });
+
+    res.json({ message: "Talep ve ilişkili veriler silindi" });
   } catch (err) {
-    res.status(500).json({ error: "Temizleme hatası", details: err.message });
+    res.status(500).json({ error: "Silme hatası", details: err.message });
   }
 };

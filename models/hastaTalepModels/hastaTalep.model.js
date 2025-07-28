@@ -5,31 +5,18 @@ const HastaTalepSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   passportNo: { type: String, required: true },
   phone: { type: String, required: true },
-  country: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", required: true }, // ✅ artık ID geldiği için ObjectId olarak tutulmalı
+
+  bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", required: true },
+  country: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", required: true },
   language: { type: String, required: true },
   wheelchair: { type: String, enum: ["Evet", "Hayır"], default: "Hayır" },
 
   lokasyon: { type: String, required: true },
   kategori: { type: String, required: true },
 
-  transferType: { type: String, enum: ["havalimani", "guzergah"], required: true },
-  flightCode: { type: String },
-
-  gelisHavalimani: { type: mongoose.Schema.Types.ObjectId, ref: "Havalimani" }, // ✅
-  kalkisSaati: { type: Date },
-  inisSaati: { type: Date },
-  baggageCount: { type: Number },
-
-  donusHavalimani: { type: mongoose.Schema.Types.ObjectId, ref: "Havalimani" }, // ✅
-  donusKalkisSaati: { type: Date },
-  donusInisSaati: { type: Date },
-  donusBaggageCount: { type: Number },
-
-  documents: [{ type: String }],
-
   companions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Companions" }],
   routes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Routes" }],
-  notificationPerson: { type: mongoose.Schema.Types.ObjectId, ref: "NotificationPerson" },
+  notificationPerson: { type: mongoose.Schema.Types.ObjectId, ref: "NotificationPerson" }
 }, { timestamps: true });
 
 module.exports = mongoose.model("HastaTalep", HastaTalepSchema);
