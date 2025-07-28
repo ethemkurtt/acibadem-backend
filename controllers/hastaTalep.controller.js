@@ -26,15 +26,20 @@ const createRouteRecord = async (hastaId, routeData) => {
 
     const sideData = { ...routeData[side] };
 
-    // Dosyalar varsa kaydet
-    if (routeData[side].ticketFile) {
+    // ✅ Eğer ticketFile varsa kaydet, yoksa hiç ekleme
+    if (routeData[side].ticketFile && routeData[side].ticketFile.originalname) {
       sideData.ticket = saveFileInfo(routeData[side].ticketFile, "tickets");
+    } else {
+      delete sideData.ticket; // ❌ Boş string gitmesin
     }
 
-    if (routeData[side].passportFiles?.length) {
+    // ✅ Eğer passportFiles varsa kaydet, yoksa hiç ekleme
+    if (Array.isArray(routeData[side].passportFiles) && routeData[side].passportFiles.length) {
       sideData.passport = routeData[side].passportFiles.map((file) =>
         saveFileInfo(file, "passports")
       );
+    } else {
+      delete sideData.passport; // ❌ Boş array veya string gitmesin
     }
 
     return sideData;
