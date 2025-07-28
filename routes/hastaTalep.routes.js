@@ -17,7 +17,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-router.delete("/clear", hastaTalepController.clearAllHastaTalepleri);
 
 // Routes
 router.post(
