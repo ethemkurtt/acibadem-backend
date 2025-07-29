@@ -99,7 +99,7 @@ exports.createHastaTalep = async (req, res) => {
     res.status(201).json(newTalep);
   } catch (err) {
     console.error("❌ Hasta Talep Hatası:", err);
-    res.status(500).json({ error: "Bir hata oluştu." });
+    res.status(500).json({ error: err });
   }
 };
 
