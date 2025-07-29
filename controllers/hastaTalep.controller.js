@@ -20,26 +20,30 @@ const saveFileInfo = (file, folder) => {
 };
 
 // 📌 Tek route kaydı oluşturma
+// 📌 Tek route kaydı oluşturma
 const createRouteRecord = async (hastaId, routeData) => {
   const processSide = async (side) => {
     if (!routeData[side]) return null;
 
     const sideData = { ...routeData[side] };
 
-    // ✅ Eğer ticketFile varsa kaydet, yoksa hiç ekleme
-    if (routeData[side].ticketFile && routeData[side].ticketFile.originalname) {
-      sideData.ticket = saveFileInfo(routeData[side].ticketFile, "tickets");
-    } else {
-      delete sideData.ticket; // ❌ Boş string gitmesin
+    // 🚩 Eğer locationId boş ise tamamen sil
+    if (!sideData.locationId || sideData.locationId === "") {
+      delete sideData.locationId;
     }
 
-    // ✅ Eğer passportFiles varsa kaydet, yoksa hiç ekleme
-    if (Array.isArray(routeData[side].passportFiles) && routeData[side].passportFiles.length) {
-      sideData.passport = routeData[side].passportFiles.map((file) =>
-        saveFileInfo(file, "passports")
-      );
+    // 🚩 Eğer ticket stringi varsa kaydet
+    if (routeData[side].ticket && routeData[side].ticket !== "") {
+      sideData.ticket = routeData[side].ticket;  // sadece gelen stringi kaydediyoruz
     } else {
-      delete sideData.passport; // ❌ Boş array veya string gitmesin
+      delete sideData.ticket;
+    }
+
+    // 🚩 Eğer passport stringleri varsa kaydet
+    if (Array.isArray(routeData[side].passport) && routeData[side].passport.length) {
+      sideData.passport = routeData[side].passport;  // sadece gelen passport stringlerini kaydediyoruz
+    } else {
+      delete sideData.passport;
     }
 
     return sideData;
@@ -52,6 +56,8 @@ const createRouteRecord = async (hastaId, routeData) => {
   });
 };
 
+
+// ✅ POST - Yeni Talep Oluştur
 // ✅ POST - Yeni Talep Oluştur
 exports.createHastaTalep = async (req, res) => {
   try {
@@ -69,7 +75,7 @@ exports.createHastaTalep = async (req, res) => {
       })
     );
 
-    // 3️⃣ Routes ekle (dosyalarla birlikte)
+    // 3️⃣ Routes ekle (stringlerle birlikte)
     const routeIds = await Promise.all(
       routes.map((r) => createRouteRecord(newTalep._id, r))
     ).then((records) => records.map((r) => r._id));
@@ -96,6 +102,7 @@ exports.createHastaTalep = async (req, res) => {
     res.status(500).json({ error: "Bir hata oluştu." });
   }
 };
+
 
 // ✅ GET - Tüm Talepler
 exports.getAllHastaTalepleri = async (req, res) => {

@@ -19,8 +19,8 @@ const RoutesSchema = new mongoose.Schema({
     flightCode: String,
     departure: Date,
     arrival: Date,
-    ticket: FileSchema, // ✅ Dosya bilgisi obje
-    passport: [FileSchema], // ✅ Array of objects
+    ticket: String, // ✅ Dosya bilgisi obje
+    passport: String, // ✅ Array of objects
   },
   drop: {
     type: {
@@ -34,8 +34,8 @@ const RoutesSchema = new mongoose.Schema({
     flightCode: String,
     departure: Date,
     arrival: Date,
-    ticket: FileSchema,
-    passport: [FileSchema],
+    ticket: String,
+    passport:String,
   },
 });
 
