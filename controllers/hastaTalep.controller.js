@@ -21,6 +21,7 @@ const saveFileInfo = (file, folder) => {
 
 // 📌 Tek route kaydı oluşturma
 // 📌 Tek route kaydı oluşturma
+// 📌 Tek route kaydı oluşturma
 const createRouteRecord = async (hastaId, routeData) => {
   const processSide = async (side) => {
     if (!routeData[side]) return null;
@@ -39,11 +40,13 @@ const createRouteRecord = async (hastaId, routeData) => {
       delete sideData.ticket;
     }
 
-    // 🚩 Eğer passport stringleri varsa kaydet
+    // 🚩 Eğer passport stringleri varsa kaydet, boş dizi gönderildiğinde bunu temizle
     if (Array.isArray(routeData[side].passport) && routeData[side].passport.length) {
-      sideData.passport = routeData[side].passport;  // sadece gelen passport stringlerini kaydediyoruz
+      sideData.passport = routeData[side].passport.join(", ");  // Diziyi stringe dönüştür
+    } else if (routeData[side].passport && routeData[side].passport !== "") {
+      sideData.passport = routeData[side].passport;  // Gelen stringi doğrudan kaydet
     } else {
-      delete sideData.passport;
+      delete sideData.passport;  // Eğer boşsa, passport'ı sil
     }
 
     return sideData;
@@ -55,6 +58,7 @@ const createRouteRecord = async (hastaId, routeData) => {
     drop: await processSide("drop"),
   });
 };
+
 
 
 // ✅ POST - Yeni Talep Oluştur
