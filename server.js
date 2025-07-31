@@ -21,7 +21,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // 🔗 Route'lar
 const otelRoutes = require("./routes/otel.routes");
 const hastaTalepRoutes = require("./routes/hastaTalep.routes");
-
+const departmanRoutes = require("./routes/departman.routes");
 app.use("/api/otel", otelRoutes); // → /api/otel/...
 app.use("/api/hasta-talep", hastaTalepRoutes); // → /api/hasta-talep/...
 const havalimaniRoutes = require("./routes/havalimani.routes");
@@ -41,7 +41,7 @@ const roomRoutes = require("./routes/room.route");
 app.use("/api/rooms", roomRoutes);
 app.use("/api", userRoutes);
 // JSON parse middleware
-
+app.use("/api/departman", departmanRoutes);
 const roleRoutes = require("./routes/role.routes");
 app.use("/api/roles", roleRoutes);
 app.use(express.json());
