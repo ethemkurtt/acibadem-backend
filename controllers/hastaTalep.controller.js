@@ -6,7 +6,8 @@ const HastaTalep = require("../models/hastaTalepModels/hastaTalep.model");
 const Companions = require("../models/hastaTalepModels/companions.model");
 const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 const Routes = require("../models/hastaTalepModels/routes.model");
-
+const Bolge = require("../models/bolge.model");
+const Ulke = require("../models/ulke.model");
 // 📌 Dosya kaydetme yardımcı fonksiyonu
 const saveFileInfo = (file, folder) => {
   if (!file) return null;
@@ -127,12 +128,27 @@ exports.getHastaTalepById = async (req, res) => {
     const talep = await HastaTalep.findById(req.params.id)
       .populate("companions")
       .populate("routes")
-      .populate("notificationPerson");
+      .populate("notificationPerson")
+      .lean(); // Sonuçları plain JS objesi yapar (daha rahat ekleme yapılır)
 
     if (!talep) return res.status(404).json({ error: "Talep bulunamadı." });
 
+    // 🔹 Bölge ve ülke adlarını çek
+    const bolge = talep.bolge
+      ? await Bolge.findById(talep.bolge).lean()
+      : null;
+
+    const country = talep.country
+      ? await Ulke.findById(talep.country).populate("bolgeId", "ad").lean()
+      : null;
+
+    // 🔹 Yeni alanları talep objesine ekle
+    talep.bolgeName = bolge ? bolge.ad : "-";
+    talep.countryName = country ? country.ad : "-";
+
     res.json(talep);
   } catch (err) {
+    console.error("❌ Hata:", err);
     res.status(500).json({ error: "Sunucu hatası", details: err.message });
   }
 };
