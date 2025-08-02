@@ -57,7 +57,12 @@ exports.getMe = async (req, res) => {
     if (!token) return res.status(401).json({ error: "Token bulunamadı." });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
+
+    // departman bilgisini populate ile getir
+    const user = await User.findById(decoded.id)
+      .select("-password")
+      .populate("departman", "ad"); // sadece ad alanını getirir
+
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
     res.json({ user });

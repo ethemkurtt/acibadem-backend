@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema({
   role: { type: String, required: true },
   access: { type: [Number], default: [] },
   tc: { type: String, default: null },
-  departman: { type: String, default: null },
+  departman: { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
   telefon: { type: String, default: null },
   mail: { type: String, default: null },
 });
