@@ -50,3 +50,19 @@ exports.login = async (req, res) => {
     res.status(500).json({ error: "Sunucu hatası" });
   }
 };
+
+exports.getMe = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "Token bulunamadı." });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+
+    res.json({ user });
+  } catch (err) {
+    console.error("getMe error:", err.message);
+    res.status(500).json({ error: "Sunucu hatası" });
+  }
+};

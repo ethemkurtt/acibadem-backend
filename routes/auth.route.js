@@ -3,6 +3,7 @@ const router = express.Router();
 
 const { authenticate, requireRole } = require("../middlewares/auth");
 const isSuperAdmin = require("../middlewares/isSuperAdmin");
+const { getMe } = require("../controllers/auth.controller");
 
 const userController = require("../controllers/user.controller");
 const authController = require("../controllers/auth.controller");
@@ -22,7 +23,7 @@ router.get(
 
 // ================== Kullanıcı CRUD ==================
 router.use("/users", authenticate); // tüm /users endpoint'leri oturum ister
-
+router.get("/me", getMe);
 router.get("/users", userController.getAllUsers);            
 router.get("/users/:id", userController.getUserById);         
 router.put("/users/:id", userController.updateUser);           
