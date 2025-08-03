@@ -7,44 +7,35 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 🔍 Kullanıcıyı getir
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
 
-    // 🔒 Şifre kontrolü
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
     let roleAccess = [];
 
-    // ✅ Superadmin ise tüm erişim izinlerini ver
     if (user.role === "superadmin") {
-      // Varsayılan olarak tüm izinleri veriyoruz – örnek: 1-100 arası
-      roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
+      roleAccess = Array.from({ length: 100 }, (_, i) => i + 1); // 1-100 arası
     } else {
-      // 🔽 Diğer roller için Role koleksiyonundan erişim al
       const role = await Role.findOne({ name: user.role });
       roleAccess = role ? role.access : [];
     }
 
-    // 🔧 Kullanıcıya ait özel access'leri de ekle
     const finalAccess = [...new Set([...(user.access || []), ...roleAccess])];
 
-    // 🔐 JWT TOKEN oluştur
     const token = jwt.sign(
       { id: user._id, role: user.role, access: finalAccess },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
-// test
-    // ✅ Başarıyla dön
+
     res.json({
       message: "Giriş başarılı.",
       token,
       role: user.role,
-      access: finalAccess
+      access: finalAccess,
     });
-
   } catch (err) {
     console.error("Login error:", err.message);
     res.status(500).json({ error: "Sunucu hatası" });
@@ -58,14 +49,38 @@ exports.getMe = async (req, res) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // departman bilgisini populate ile getir
     const user = await User.findById(decoded.id)
       .select("-password")
-      .populate("departman", "ad"); // sadece ad alanını getirir
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    res.json({ user });
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        access: decoded.access,
+        tc: user.tc,
+        telefon: user.telefon,
+        mail: user.mail,
+        dogumTarihi: user.dogumTarihi,
+        cinsiyet: user.cinsiyet,
+        ehliyet: user.ehliyet,
+        departman: user.departman?._id || null,
+        departmanName: user.departman?.ad || null,
+        lokasyon: user.lokasyon?._id || null,
+        lokasyonName: user.lokasyon?.ad || null,
+        bolge: user.bolge?._id || null,
+        bolgeName: user.bolge?.ad || null,
+        ulke: user.ulke?._id || null,
+        ulkeName: user.ulke?.ad || null,
+      },
+    });
   } catch (err) {
     console.error("getMe error:", err.message);
     res.status(500).json({ error: "Sunucu hatası" });

@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/user.model");
 
+// Kullanıcı oluştur
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -25,6 +26,13 @@ exports.createUser = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Ad, email, şifre ve rol zorunludur." });
+    }
+
+    // ✅ Access kontrolü (1-100 arası)
+    if (access && (!Array.isArray(access) || access.some((v) => v < 1 || v > 100))) {
+      return res
+        .status(400)
+        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
     }
 
     const existing = await User.findOne({ email });
@@ -70,6 +78,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
+// Tüm kullanıcıları getir
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -86,6 +95,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Belirli kullanıcıyı getir
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
@@ -103,20 +113,30 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+// Kullanıcıyı güncelle
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
 
+    // ✅ Access kontrolü (1-100 arası)
+    if (
+      updateData.access &&
+      (!Array.isArray(updateData.access) ||
+        updateData.access.some((v) => v < 1 || v > 100))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
+    }
+
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     } else {
-      delete updateData.password;
+      delete updateData.password; // boş şifreyi güncelleme
     }
 
-    const updated = await User.findByIdAndUpdate(id, updateData, {
-      new: true,
-    })
+    const updated = await User.findByIdAndUpdate(id, updateData, { new: true })
       .populate("departman", "ad")
       .populate("lokasyon", "ad")
       .populate("bolge", "ad")
@@ -135,6 +155,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
+// Kullanıcı sil
 exports.deleteUser = async (req, res) => {
   try {
     const deleted = await User.findByIdAndDelete(req.params.id);
@@ -148,6 +169,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
+// ✨ Kullanıcıdan hassas bilgileri filtrele
 function userResponse(user) {
   return {
     id: user._id,
