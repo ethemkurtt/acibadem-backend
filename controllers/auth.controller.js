@@ -3,11 +3,42 @@ const Role = require("../models/role.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+// ✨ Kullanıcıyı response formatında döndürmek için fonksiyon
+function userResponse(user, access) {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    access: access,
+    tc: user.tc,
+    telefon: user.telefon,
+    mail: user.mail,
+    dogumTarihi: user.dogumTarihi,
+    cinsiyet: user.cinsiyet,
+    ehliyet: user.ehliyet,
+    departman: user.departman?._id || null,
+    departmanName: user.departman?.ad || null,
+    lokasyon: user.lokasyon?._id || null,
+    lokasyonName: user.lokasyon?.ad || null,
+    bolge: user.bolge?._id || null,
+    bolgeName: user.bolge?.ad || null,
+    ulke: user.ulke?._id || null,
+    ulkeName: user.ulke?.ad || null,
+  };
+}
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    // ✅ Kullanıcıyı populate ile getir
+    const user = await User.findOne({ email })
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
+
     if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -30,11 +61,13 @@ exports.login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    // ✅ Artık user bilgisini de response içine ekliyoruz
     res.json({
       message: "Giriş başarılı.",
       token,
       role: user.role,
       access: finalAccess,
+      user: userResponse(user, finalAccess), // 👈 Burası kritik
     });
   } catch (err) {
     console.error("Login error:", err.message);
@@ -58,29 +91,7 @@ exports.getMe = async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    res.json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        access: decoded.access,
-        tc: user.tc,
-        telefon: user.telefon,
-        mail: user.mail,
-        dogumTarihi: user.dogumTarihi,
-        cinsiyet: user.cinsiyet,
-        ehliyet: user.ehliyet,
-        departman: user.departman?._id || null,
-        departmanName: user.departman?.ad || null,
-        lokasyon: user.lokasyon?._id || null,
-        lokasyonName: user.lokasyon?.ad || null,
-        bolge: user.bolge?._id || null,
-        bolgeName: user.bolge?.ad || null,
-        ulke: user.ulke?._id || null,
-        ulkeName: user.ulke?.ad || null,
-      },
-    });
+    res.json({ user: userResponse(user, decoded.access) });
   } catch (err) {
     console.error("getMe error:", err.message);
     res.status(500).json({ error: "Sunucu hatası" });
