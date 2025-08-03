@@ -11,8 +11,14 @@ exports.createUser = async (req, res) => {
       access,
       tc,
       departman,
+      lokasyon,
+      bolge,
+      ulke,
       telefon,
       mail,
+      dogumTarihi,
+      cinsiyet,
+      ehliyet,
     } = req.body;
 
     if (!name || !email || !password || !role) {
@@ -36,15 +42,27 @@ exports.createUser = async (req, res) => {
       access: access || [],
       tc: tc || null,
       departman: departman || null,
+      lokasyon: lokasyon || null,
+      bolge: bolge || null,
+      ulke: ulke || null,
       telefon: telefon || null,
       mail: mail || null,
+      dogumTarihi: dogumTarihi || null,
+      cinsiyet: cinsiyet || null,
+      ehliyet: ehliyet || false,
     });
 
     await newUser.save();
 
+    const populatedUser = await User.findById(newUser._id)
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
+
     res.status(201).json({
       message: "Kullanıcı oluşturuldu.",
-      user: userResponse(newUser),
+      user: userResponse(populatedUser),
     });
   } catch (err) {
     console.error("createUser hatası:", err);
@@ -52,10 +70,15 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// Tüm kullanıcıları getir
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().sort({ name: 1 });
+    const users = await User.find()
+      .sort({ name: 1 })
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
+
     res.json(users.map((user) => userResponse(user)));
   } catch (err) {
     console.error("getAllUsers hatası:", err);
@@ -63,10 +86,14 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// Belirli kullanıcıyı getir
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(req.params.id)
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
+
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
     res.json(userResponse(user));
@@ -76,7 +103,6 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// Kullanıcıyı güncelle
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -85,10 +111,17 @@ exports.updateUser = async (req, res) => {
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     } else {
-      delete updateData.password; // boş şifreyi güncelleme
+      delete updateData.password;
     }
 
-    const updated = await User.findByIdAndUpdate(id, updateData, { new: true });
+    const updated = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+    })
+      .populate("departman", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
+
     if (!updated)
       return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
@@ -102,7 +135,6 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-// Kullanıcı sil
 exports.deleteUser = async (req, res) => {
   try {
     const deleted = await User.findByIdAndDelete(req.params.id);
@@ -116,7 +148,6 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// ✨ Kullanıcıdan hassas bilgileri filtrele
 function userResponse(user) {
   return {
     id: user._id,
@@ -125,8 +156,22 @@ function userResponse(user) {
     role: user.role,
     access: user.access,
     tc: user.tc,
-    departman: user.departman,
     telefon: user.telefon,
     mail: user.mail,
+    dogumTarihi: user.dogumTarihi,
+    cinsiyet: user.cinsiyet,
+    ehliyet: user.ehliyet,
+
+    departman: user.departman?._id || null,
+    departmanName: user.departman?.ad || null,
+
+    lokasyon: user.lokasyon?._id || null,
+    lokasyonName: user.lokasyon?.ad || null,
+
+    bolge: user.bolge?._id || null,
+    bolgeName: user.bolge?.ad || null,
+
+    ulke: user.ulke?._id || null,
+    ulkeName: user.ulke?.ad || null,
   };
 }
