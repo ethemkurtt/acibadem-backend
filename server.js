@@ -58,7 +58,8 @@ const vizeRoutes = require('./routes/vize.routes');
 app.use('/api/seyahat/vize-talepler', vizeRoutes);
 const temsilRoutes = require('./routes/temsil.routes');
 app.use('/api/seyahat/temsil-talepler', temsilRoutes);
-
+const digerRoutes = require('./routes/diger.routes');
+app.use('/api/seyahat/diger-talepler', digerRoutes);
 // 🧠 MongoDB Bağlantısı
 mongoose
   .connect(process.env.MONGO_URI, {
