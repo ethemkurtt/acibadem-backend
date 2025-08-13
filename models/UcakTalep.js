@@ -39,6 +39,7 @@ const UcakTalepSchema = new mongoose.Schema(
     donus_saati:    { type: String, trim: true },
     donus_havayolu: { type: String, trim: true },
     donus_ucus_kodu:{ type: String, trim: true },
+    type:{ type: String, trim: true },
 
     aciklama:       { type: String, trim: true }
   },

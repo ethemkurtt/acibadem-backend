@@ -52,6 +52,9 @@ app.use("/api/vehicles", vehicleRoutes);
 const ucakTalepRoutes = require('./routes/ucakTalep.routes');
 app.use('/api/seyahat/ucak-talepler', ucakTalepRoutes);
 app.use("/api/otel-talep", require("./routes/otelTalep.routes"));
+const digerUlasimRoutes = require('./routes/digerUlasim.routes');
+app.use('/api/seyahat/diger-ulasim-talepler', digerUlasimRoutes);
+
 // 🧠 MongoDB Bağlantısı
 mongoose
   .connect(process.env.MONGO_URI, {
