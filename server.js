@@ -56,6 +56,8 @@ const digerUlasimRoutes = require('./routes/digerUlasim.routes');
 app.use('/api/seyahat/diger-ulasim-talepler', digerUlasimRoutes);
 const vizeRoutes = require('./routes/vize.routes');
 app.use('/api/seyahat/vize-talepler', vizeRoutes);
+const temsilRoutes = require('./routes/temsil.routes');
+app.use('/api/seyahat/temsil-talepler', temsilRoutes);
 
 // 🧠 MongoDB Bağlantısı
 mongoose
