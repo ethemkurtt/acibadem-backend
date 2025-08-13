@@ -49,7 +49,8 @@ const bolgeUlkeRoutes = require("./routes/bolgeUlke.routes");
 app.use("/api", bolgeUlkeRoutes);
 // Route tanımı
 app.use("/api/vehicles", vehicleRoutes);
-
+const ucakTalepRoutes = require('./routes/ucakTalep.routes');
+app.use('/api/seyahat/ucak-talepler', ucakTalepRoutes);
 app.use("/api/otel-talep", require("./routes/otelTalep.routes"));
 // 🧠 MongoDB Bağlantısı
 mongoose
