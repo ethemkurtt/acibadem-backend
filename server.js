@@ -60,6 +60,11 @@ const temsilRoutes = require('./routes/temsil.routes');
 app.use('/api/seyahat/temsil-talepler', temsilRoutes);
 const digerRoutes = require('./routes/diger.routes');
 app.use('/api/seyahat/diger-talepler', digerRoutes);
+const talepTipiRoutes = require('./routes/talepTipi.routes');
+app.use('/api/talep-tipleri', talepTipiRoutes);
+
+
+
 // 🧠 MongoDB Bağlantısı
 mongoose
   .connect(process.env.MONGO_URI, {
