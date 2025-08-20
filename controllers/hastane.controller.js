@@ -44,3 +44,22 @@ exports.deleteHastene = async (req, res) => {
   if (!deleted) return res.status(404).json({ message: "Silme başarısız" });
   res.json({ message: "Hastane silindi" });
 };
+exports.updateHastane = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updated = await Hastane.findByIdAndUpdate(
+      id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Hastane bulunamadı" });
+    }
+
+    res.json({ message: "Hastane başarıyla güncellendi", hastane: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};

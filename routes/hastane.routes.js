@@ -6,6 +6,7 @@ const {
   deleteAllHastaneler,
   createHastene,
   deleteHastene,
+    updateHastane,  
 } = require("../controllers/hastane.controller");
 
 router.post("/import", importHastaneler);
@@ -13,4 +14,5 @@ router.post("/", createHastene);
 router.get("/", getAllHastaneler);
 router.delete("/", deleteAllHastaneler);
 router.delete("/:id", deleteHastene);
+router.put("/:id", updateHastane);
 module.exports = router;
