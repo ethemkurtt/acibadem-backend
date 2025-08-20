@@ -63,3 +63,14 @@ exports.updateHastane = async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 };
+exports.getHastaneById = async (req, res) => {
+  try {
+    const hastane = await Hastane.findById(req.params.id);
+    if (!hastane) {
+      return res.status(404).json({ message: "Hastane bulunamadı" });
+    }
+    res.json(hastane);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
