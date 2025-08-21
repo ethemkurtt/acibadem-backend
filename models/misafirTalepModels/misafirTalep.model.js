@@ -1,48 +1,33 @@
-// models/misafirTalep.model.js
+// src/models/misafirTalepModels/misafirTalep.model.js
 const mongoose = require("mongoose");
 
-const misafirYolcuSchema = new mongoose.Schema({
-  adSoyad: { type: String, required: true },
-  tcPasaport: { type: String, required: true },
-  telefon: { type: String, required: true },
-});
-
-const misafirRouteSchema = new mongoose.Schema({
-  pickup: {
-    locationId: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
-    ticket: { type: String },
-    passport: { type: String }, // diziyi string birleştirme şeklinde saklıyoruz
-  },
-  drop: {
-    locationId: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
-    ticket: { type: String },
-    passport: { type: String },
-  },
-});
-
-const misafirTalepSchema = new mongoose.Schema(
+const schema = new mongoose.Schema(
   {
-    misafir_lokasyon: { type: String, required: true },
-    misafir_adSoyad: { type: String, required: true },
-    misafir_tcPasaport: { type: String, required: true },
-    misafir_gsm: { type: String, required: true },
-    misafir_bolge: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Bolge",
-      required: true,
-    },
-    misafir_ulke: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Ulke",
-      required: true,
-    },
-    misafir_language: { type: String },
-    misafir_sandalye: { type: String, enum: ["Evet", "Hayır"] },
-    misafir_yolcular: [misafirYolcuSchema],
-    misafir_routes: [misafirRouteSchema],
-    misafir_aciklama: { type: String },
+    requestType: { type: String, enum: ["hasta", "personel", "misafir"], default: "misafir", required: true },
+
+    fullName: { type: String, required: true },
+    passportNo: { type: String, required: true },
+    phone: { type: String, required: true },
+
+    bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
+    country: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
+    language: { type: String, default: null },
+    wheelchair: { type: String, enum: ["Evet", "Hayır"], default: "Hayır" },
+
+    lokasyon: { type: String, required: true },
+    kategori: { type: String, default: "Misafir" },
+    aciklama: { type: String, default: null },
+
+    companions: [{ type: mongoose.Schema.Types.ObjectId, ref: "MisafirCompanions" }],
+    routes: [{ type: mongoose.Schema.Types.ObjectId, ref: "MisafirRoutes" }],
+    notificationPerson: { type: mongoose.Schema.Types.ObjectId, ref: "MisafirNotificationPerson", default: null },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("MisafirTalep", misafirTalepSchema);
+schema.index({ createdAt: -1 });
+schema.index({ fullName: 1 });
+
+module.exports = mongoose.models.MisafirTalep
+  ? mongoose.model("MisafirTalep")
+  : mongoose.model("MisafirTalep", schema);
