@@ -64,7 +64,8 @@ const digerRoutes = require('./routes/diger.routes');
 app.use('/api/seyahat/diger-talepler', digerRoutes);
 const talepTipiRoutes = require('./routes/talepTipi.routes');
 app.use('/api/talep-tipleri', talepTipiRoutes);
-
+const misafirTalepRoutes = require("./routes/misafirTalep.routes");
+app.use("/api/seyahat/misafir-talepler", misafirTalepRoutes);
 
 
 // 🧠 MongoDB Bağlantısı
