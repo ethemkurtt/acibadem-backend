@@ -1,30 +1,47 @@
-const User = require("../models/user.model");
-const Role = require("../models/role.model");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+// controllers/auth.controller.js
+const User  = require("../models/user.model");
+const Role  = require("../models/role.model");
+const bcrypt= require("bcryptjs");
+const jwt   = require("jsonwebtoken");
 
-// ✨ Kullanıcıyı response formatında döndürmek için fonksiyon
-function userResponse(user, access) {
+// 🔹 yardımcı: string permission birleştirici
+function buildEffectivePerms(user, roleDoc) {
+  const rolePerms = Array.isArray(roleDoc?.permissions) ? roleDoc.permissions : [];
+  const userPerms = Array.isArray(user.perms) ? user.perms : [];
+  // benzersizleştir
+  return Array.from(new Set([...rolePerms, ...userPerms]));
+}
+
+// ✨ kullanıcıyı response formatında döndürmek için fonksiyon (senin versiyonun + perms/roles eklendi)
+function userResponse(user, access, perms) {
   return {
     id: user._id,
     name: user.name,
     email: user.email,
+
+    // backward-compat alanlar
     role: user.role,
     access: access,
+
+    // 🔹 yeni RBAC alanları
+    roles: user.roles || [],   // çoklu rol
+    perms: perms || [],        // efektif string izinler
+
     tc: user.tc,
     telefon: user.telefon,
     mail: user.mail,
     dogumTarihi: user.dogumTarihi,
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
-    departman: user.departman?._id || null,
-    departmanName: user.departman?.ad || null,
-    lokasyon: user.lokasyon?._id || null,
-    lokasyonName: user.lokasyon?.ad || null,
-    bolge: user.bolge?._id || null,
-    bolgeName: user.bolge?.ad || null,
-    ulke: user.ulke?._id || null,
-    ulkeName: user.ulke?.ad || null,
+
+    departman:      user.departman?._id || null,
+    departmanName:  user.departman?.ad || null,
+    lokasyon:       user.lokasyon?._id || null,
+    lokasyonName:   user.lokasyon?.ad || null,
+    bolge:          user.bolge?._id || null,
+    bolgeName:      user.bolge?.ad || null,
+    ulke:           user.ulke?._id || null,
+    ulkeName:       user.ulke?.ad || null,
   };
 }
 
@@ -32,7 +49,6 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // ✅ Kullanıcıyı populate ile getir
     const user = await User.findOne({ email })
       .populate("departman", "ad")
       .populate("lokasyon", "ad")
@@ -44,30 +60,43 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
+    // ---- numerik ACCESS (mevcut sistemin devamı) ----
     let roleAccess = [];
-
     if (user.role === "superadmin") {
-      roleAccess = Array.from({ length: 100 }, (_, i) => i + 1); // 1-100 arası
+      roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
     } else {
-      const role = await Role.findOne({ name: user.role });
-      roleAccess = role ? role.access : [];
+      const roleByName = await Role.findOne({ name: user.role });
+      roleAccess = roleByName ? (roleByName.access || []) : [];
     }
-
     const finalAccess = [...new Set([...(user.access || []), ...roleAccess])];
 
+    // ---- string PERMISSIONS (yeni RBAC) ----
+    // Çoklu rol desteği için, istersen Role koleksiyonunu name ∈ user.roles ile de çekip birleştirebilirsin.
+    const primaryRoleDoc = await Role.findOne({ name: user.role });
+    const finalPerms = buildEffectivePerms(user, primaryRoleDoc); // role.permissions + user.perms
+
     const token = jwt.sign(
-      { id: user._id, role: user.role, access: finalAccess },
+      {
+        id:   user._id,
+        role: user.role,        // eski kullanım
+        access: finalAccess,    // eski kullanım
+        // 🔹 yeni
+        roles: user.roles || [],
+        perms: finalPerms
+      },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // ✅ Artık user bilgisini de response içine ekliyoruz
-    res.json({
+    return res.json({
       message: "Giriş başarılı.",
       token,
       role: user.role,
       access: finalAccess,
-      user: userResponse(user, finalAccess), // 👈 Burası kritik
+      // 🔹 yeni alanlar da dönüyor
+      perms: finalPerms,
+      roles: user.roles || [],
+      user: userResponse(user, finalAccess, finalPerms),
     });
   } catch (err) {
     console.error("Login error:", err.message);
@@ -91,7 +120,8 @@ exports.getMe = async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    res.json({ user: userResponse(user, decoded.access) });
+    // decoded.access ve decoded.perms’tan faydalanıyoruz
+    res.json({ user: userResponse(user, decoded.access || [], decoded.perms || []) });
   } catch (err) {
     console.error("getMe error:", err.message);
     res.status(500).json({ error: "Sunucu hatası" });
