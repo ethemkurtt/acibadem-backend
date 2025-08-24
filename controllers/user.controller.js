@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/user.model");
 
+// Yeni kullanıcı oluştur
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -19,14 +20,22 @@ exports.createUser = async (req, res) => {
       dogumTarihi,
       cinsiyet,
       ehliyet,
+      permissions, // 🔹 yeni
     } = req.body;
 
     if (!name || !email || !password || !role) {
-      return res.status(400).json({ error: "Ad, email, şifre ve rol zorunludur." });
+      return res
+        .status(400)
+        .json({ error: "Ad, email, şifre ve rol zorunludur." });
     }
 
-    if (access && (!Array.isArray(access) || access.some((v) => v < 1 || v > 100))) {
-      return res.status(400).json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
+    if (
+      access &&
+      (!Array.isArray(access) || access.some((v) => v < 1 || v > 100))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
     }
 
     const existing = await User.findOne({ email });
@@ -50,6 +59,7 @@ exports.createUser = async (req, res) => {
       dogumTarihi: dogumTarihi || null,
       cinsiyet: cinsiyet || null,
       ehliyet: ehliyet || false,
+      permissions: permissions || {}, // 🔹 yeni
     });
 
     await newUser.save();
@@ -60,13 +70,19 @@ exports.createUser = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    res.status(201).json({ message: "Kullanıcı oluşturuldu.", user: userResponse(populatedUser) });
+    res
+      .status(201)
+      .json({
+        message: "Kullanıcı oluşturuldu.",
+        user: userResponse(populatedUser),
+      });
   } catch (err) {
     console.error("createUser hatası:", err);
     res.status(500).json({ error: "Kullanıcı oluşturulamadı." });
   }
 };
 
+// Tüm kullanıcılar
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -83,6 +99,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Tek kullanıcı
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
@@ -99,6 +116,7 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+// Güncelle
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -106,15 +124,23 @@ exports.updateUser = async (req, res) => {
 
     if (
       updateData.access &&
-      (!Array.isArray(updateData.access) || updateData.access.some((v) => v < 1 || v > 100))
+      (!Array.isArray(updateData.access) ||
+        updateData.access.some((v) => v < 1 || v > 100))
     ) {
-      return res.status(400).json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
+      return res
+        .status(400)
+        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
     }
 
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     } else {
       delete updateData.password;
+    }
+
+    // 🔹 permissions Map ise normalize et
+    if (updateData.permissions && typeof updateData.permissions === "object") {
+      // direkt set edebiliriz
     }
 
     const updated = await User.findByIdAndUpdate(id, updateData, { new: true })
@@ -132,6 +158,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
+// Sil
 exports.deleteUser = async (req, res) => {
   try {
     const deleted = await User.findByIdAndDelete(req.params.id);
@@ -143,6 +170,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
+// Yardımcı: JSON response
 function userResponse(user) {
   return {
     id: user._id,
@@ -164,5 +192,11 @@ function userResponse(user) {
     bolgeName: user.bolge?.ad || null,
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
+
+    // 🔹 yeni
+    permissions:
+      user.permissions instanceof Map
+        ? Object.fromEntries(user.permissions)
+        : user.permissions || {},
   };
 }
