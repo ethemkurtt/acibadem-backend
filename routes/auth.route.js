@@ -30,7 +30,7 @@ router.put("/users/:id",   userController.updateUser);
 router.delete("/users/:id",userController.deleteUser);
 
 // sadece superadmin create edebilsin:
-router.post("/users", requireRole("superadmin"), userController.createUser);
+router.post("/users", userController.createUser);
 // (alternatif: isSuperAdmin middleware'in varsa onunla değiştir)
 
 module.exports = router;
