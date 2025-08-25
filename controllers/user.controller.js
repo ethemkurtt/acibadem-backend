@@ -20,7 +20,8 @@ exports.createUser = async (req, res) => {
       dogumTarihi,
       cinsiyet,
       ehliyet,
-      permissions, // 🔹 yeni
+      permissions, // page-bazlı izinler (Map/Object)
+      perms,       // ⭐ string[] kısa izinler
     } = req.body;
 
     if (!name || !email || !password || !role) {
@@ -36,6 +37,11 @@ exports.createUser = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
+    }
+
+    // ⭐ perms tip kontrolü
+    if (perms && !Array.isArray(perms)) {
+      return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
     }
 
     const existing = await User.findOne({ email });
@@ -58,8 +64,9 @@ exports.createUser = async (req, res) => {
       mail: mail || null,
       dogumTarihi: dogumTarihi || null,
       cinsiyet: cinsiyet || null,
-      ehliyet: ehliyet || false,
-      permissions: permissions || {}, // 🔹 yeni
+      ehliyet: ehliyet ?? false,
+      permissions: permissions || {}, // Map/Object ok
+      perms: perms || [],             // ⭐ KAYDET
     });
 
     await newUser.save();
@@ -70,12 +77,10 @@ exports.createUser = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    res
-      .status(201)
-      .json({
-        message: "Kullanıcı oluşturuldu.",
-        user: userResponse(populatedUser),
-      });
+    res.status(201).json({
+      message: "Kullanıcı oluşturuldu.",
+      user: userResponse(populatedUser),
+    });
   } catch (err) {
     console.error("createUser hatası:", err);
     res.status(500).json({ error: "Kullanıcı oluşturulamadı." });
@@ -132,18 +137,23 @@ exports.updateUser = async (req, res) => {
         .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
     }
 
+    // ⭐ perms tip kontrolü
+    if (updateData.perms && !Array.isArray(updateData.perms)) {
+      return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
+    }
+
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     } else {
       delete updateData.password;
     }
 
-    // 🔹 permissions Map ise normalize et
-    if (updateData.permissions && typeof updateData.permissions === "object") {
-      // direkt set edebiliriz
-    }
-
-    const updated = await User.findByIdAndUpdate(id, updateData, { new: true })
+    // permissions nesnesi varsa bırakıyoruz (Map/object)
+    // findByIdAndUpdate default'ta validators çalışmaz → ⭐ etkinleştir
+    const updated = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true, // ⭐
+    })
       .populate("departman", "ad")
       .populate("lokasyon", "ad")
       .populate("bolge", "ad")
@@ -193,10 +203,13 @@ function userResponse(user) {
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
 
-    // 🔹 yeni
+    // page-bazlı izinler (Map → düz objeye çevirme)
     permissions:
       user.permissions instanceof Map
         ? Object.fromEntries(user.permissions)
         : user.permissions || {},
+
+    // ⭐ kısa izinler: API çıktılarına EKLE
+    perms: Array.isArray(user.perms) ? user.perms : [],
   };
 }
