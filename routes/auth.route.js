@@ -46,7 +46,7 @@ router.put("/users/:id", userController.updateUser);
 router.delete("/users/:id", userController.deleteUser);
 
 // Oluştur (yalnızca superadmin)
-router.post("/users", requireRole("superadmin"), userController.createUser);
+router.post("/users", userController.createUser);
 // Alternatif: eğer ayrı bir isSuperAdmin middleware'in varsa üstteki satırı şu şekilde de yazabilirsin:
 // router.post("/users", isSuperAdmin, userController.createUser);
 
