@@ -67,6 +67,8 @@ app.use('/api/talep-tipleri', talepTipiRoutes);
 const misafirTalepRoutes = require("./routes/misafirTalep.routes");
 app.use("/api/misafir-talep", misafirTalepRoutes);
 app.use("/api/me", require("./routes/me.routes"));
+const roleGroupRoutes = require('./routes/roleGroup.route');  
+app.use('/api', roleGroupRoutes);   // <-- EKLENDİ
 
 // 🧠 MongoDB Bağlantısı
 mongoose
