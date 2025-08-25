@@ -46,7 +46,9 @@ const userSchema = new mongoose.Schema(
     mail:        { type: String, default: null },
     dogumTarihi: { type: Date,   default: null },
     cinsiyet:    { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
-    ehliyet:     { type: Boolean, default: false }
+    ehliyet:     { type: Boolean, default: false },
+    assignedRoles: [{ type: mongoose.Schema.Types.ObjectId, ref: "RoleProfile", default: [] }],
+
   },
   { timestamps: true }
 );
