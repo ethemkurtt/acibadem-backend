@@ -3,7 +3,7 @@ const XLSX = require("xlsx");
 const path = require("path");
 const Plaka = require("../models/Plaka");
 
-// ---------- IMPORT (Excel: excels/plakalar.xlsx) ----------
+// ---- IMPORT: excels/plakalar.xlsx ----
 exports.importPlakalar = async (req, res) => {
   try {
     const filePath = path.join(__dirname, "../excels/plakalar.xlsx");
@@ -27,7 +27,7 @@ exports.importPlakalar = async (req, res) => {
       return "";
     };
 
-    const HEADERS = {
+    const H = {
       id:    ["ID", "Id", "id"],
       plaka: ["PLAKA", "Plaka", "plaka"],
       bolum: ["BÖLÜMÜ", "BÖLÜM", "BOLUMU", "BOLUM", "BİRİM", "BIRIM"],
@@ -39,25 +39,24 @@ exports.importPlakalar = async (req, res) => {
     let skipped = 0;
 
     for (const row of rows) {
-      const plakaRaw = pick(row, HEADERS.plaka);
+      const plakaRaw = pick(row, H.plaka);
       if (!plakaRaw) { skipped++; continue; }
 
       const doc = {
-        // normalize plaka
         plaka: plakaRaw.replace(/\s+/g, " ").trim().toUpperCase(),
-        bolum: pick(row, HEADERS.bolum) || undefined,
-        marka: pick(row, HEADERS.marka) || undefined,
-        tip:   pick(row, HEADERS.tip)   || undefined,
-        // İstek gereği boş bırakılır
+        bolum: pick(row, H.bolum) || undefined,
+        marka: pick(row, H.marka) || undefined,
+        tip:   pick(row, H.tip)   || undefined,
+        // İstek gereği boş
         lokasyonId: null,
         lokasyonAd: "",
         status: true
       };
 
-      const idRaw = pick(row, HEADERS.id);
+      const idRaw = pick(row, H.id);
       if (idRaw) {
         const idNum = Number(idRaw);
-        doc.id = Number.isNaN(idNum) ? undefined : idNum;
+        if (!Number.isNaN(idNum)) doc.id = idNum;
       }
 
       ops.push({
@@ -70,7 +69,7 @@ exports.importPlakalar = async (req, res) => {
     }
 
     if (ops.length === 0) {
-      return res.status(400).json({ message: "Aktarılacak satır bulunamadı.", skipped });
+      return res.status(400).json({ message: "Aktarılacak satır yok.", skipped });
     }
 
     const result = await Plaka.bulkWrite(ops, { ordered: false });
@@ -87,7 +86,7 @@ exports.importPlakalar = async (req, res) => {
   }
 };
 
-// ---------- CRUD ----------
+// ---- CRUD ----
 exports.create = async (req, res) => {
   try {
     const created = await Plaka.create(req.body);
@@ -108,7 +107,6 @@ exports.list = async (req, res) => {
       if (!Number.isNaN(idNum)) filter.id = idNum;
     }
     if (typeof status !== "undefined" && status !== "") {
-      // "true/false/1/0" -> Boolean
       const val = String(status).toLowerCase();
       filter.status = (val === "true" || val === "1");
     }
