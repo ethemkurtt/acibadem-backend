@@ -69,3 +69,16 @@ exports.deleteAllLokasyonlar = async (req, res) => {
   const result = await Lokasyon.deleteMany({});
   res.json({ message: "Tüm lokasyonlar silindi", deletedCount: result.deletedCount });
 };
+exports.patchLokasyon = async (req, res) => {
+  try {
+    const updated = await Lokasyon.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },           // sadece gönderdiğini değiştirir
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: "Lokasyon bulunamadı" });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ message: "Kısmi güncelleme hatası", error: err.message });
+  }
+};
