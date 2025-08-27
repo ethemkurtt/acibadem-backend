@@ -1,18 +1,37 @@
 const mobilizAxios = require("../utils/axiosMobiliz");
+const Plaka = require("../models/Plaka"); // <-- EKLENDİ
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Büyük/küçük harf duyarsız ve boşlukları tekleyen normalize
+function normalizePlate(v) {
+  return String(v || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  // Eğer tire/nokta vs. çıkarılsın dersen şu satırı da ekleyebilirsin:
+  // .replace(/[^A-Z0-9 ]/g, "")
+}
+
 exports.getEnrichedVehicles = async (req, res) => {
   try {
+    console.log("🧾 DB'den PLAKA Set'i çekiliyor...");
+    const plakaDocs = await Plaka.find({}, { plaka: 1, _id: 0 }).lean();
+    const plakaSet = new Set(plakaDocs.map(p => normalizePlate(p.plaka)));
+
+    if (plakaSet.size === 0) {
+      console.warn("⚠️ Plaka koleksiyonunda kayıt yok. Boş liste döndürülüyor.");
+      return res.json([]);
+    }
+
     console.log("🚗 VEHICLES alınıyor...");
     const vehiclesRes = await mobilizAxios.get("/vehicles");
 
     console.log("🧑‍✈️ DRIVERS alınıyor...");
     const driversRes = await mobilizAxios.get("/drivers");
 
-    // sadece azıcık bekle, çökmemesi için
     await sleep(300);
 
     console.log("🚛 FLEETS alınıyor...");
@@ -23,8 +42,12 @@ exports.getEnrichedVehicles = async (req, res) => {
     console.log("📂 GROUPS alınıyor...");
     const groupsRes = await mobilizAxios.get("/groups");
 
-    // aynı işlem devam eder...
-    const vehicles = vehiclesRes.data.result || [];
+    const vehicles = (vehiclesRes.data.result || []).filter(v => {
+      // Sadece DB'deki plaka setinde olan araçları al
+      const np = normalizePlate(v.plate);
+      return np && plakaSet.has(np);
+    });
+
     const fleets = fleetsRes.data.result || [];
     const groups = groupsRes.data.result || [];
     const drivers = driversRes.data.result || [];
@@ -34,16 +57,18 @@ exports.getEnrichedVehicles = async (req, res) => {
         const { fleetId, groupId, muId, networkId, plate } = v;
 
         if (!fleetId || !groupId || !muId || !networkId || !plate) {
-          console.warn(`❌ Eksik parametreli araç: ${JSON.stringify(v)}`);
+          console.warn(`❌ Eksik parametreli araç (skip): ${JSON.stringify(v)}`);
           return null;
         }
 
         const fleet = fleets.find(f => f.fleetId === fleetId);
         const group = groups.find(g => g.groupId === groupId);
-        const driver = drivers.find(d => d.plate === plate);
+
+        const np = normalizePlate(plate);
+        const driver = drivers.find(d => normalizePlate(d.plate) === np);
 
         return {
-          plate,
+          plate: np, // normalize edilmiş plaka döndürüyoruz
           fleet: fleet?.fleetName || null,
           group: group?.groupName || null,
           muId,
@@ -54,7 +79,7 @@ exports.getEnrichedVehicles = async (req, res) => {
       })
     );
 
-    const filtered = enriched.filter(item => item !== null);
+    const filtered = enriched.filter(Boolean);
     res.json(filtered);
 
   } catch (err) {
