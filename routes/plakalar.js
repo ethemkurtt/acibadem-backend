@@ -3,7 +3,6 @@ const express = require("express");
 const router = express.Router();
 const ctrl = require("../controllers/plaka.controller");
 
-router.post("/import", ctrl.importPlakalar);
 
 router.get("/", ctrl.list);
 router.get("/:id", ctrl.getById);
