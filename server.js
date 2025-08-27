@@ -51,27 +51,29 @@ const bolgeUlkeRoutes = require("./routes/bolgeUlke.routes");
 app.use("/api", bolgeUlkeRoutes);
 // Route tanımı
 app.use("/api/vehicles", vehicleRoutes);
-const ucakTalepRoutes = require('./routes/ucakTalep.routes');
-app.use('/api/seyahat/ucak-talepler', ucakTalepRoutes);
+const ucakTalepRoutes = require("./routes/ucakTalep.routes");
+app.use("/api/seyahat/ucak-talepler", ucakTalepRoutes);
 app.use("/api/otel-talep", require("./routes/otelTalep.routes"));
-const digerUlasimRoutes = require('./routes/digerUlasim.routes');
-app.use('/api/seyahat/diger-ulasim-talepler', digerUlasimRoutes);
-const vizeRoutes = require('./routes/vize.routes');
-app.use('/api/seyahat/vize-talepler', vizeRoutes);
-const temsilRoutes = require('./routes/temsil.routes');
-app.use('/api/seyahat/temsil-talepler', temsilRoutes);
-const digerRoutes = require('./routes/diger.routes');
-app.use('/api/seyahat/diger-talepler', digerRoutes);
-const talepTipiRoutes = require('./routes/talepTipi.routes');
-app.use('/api/talep-tipleri', talepTipiRoutes);
+const digerUlasimRoutes = require("./routes/digerUlasim.routes");
+app.use("/api/seyahat/diger-ulasim-talepler", digerUlasimRoutes);
+const vizeRoutes = require("./routes/vize.routes");
+app.use("/api/seyahat/vize-talepler", vizeRoutes);
+const temsilRoutes = require("./routes/temsil.routes");
+app.use("/api/seyahat/temsil-talepler", temsilRoutes);
+const digerRoutes = require("./routes/diger.routes");
+app.use("/api/seyahat/diger-talepler", digerRoutes);
+const talepTipiRoutes = require("./routes/talepTipi.routes");
+app.use("/api/talep-tipleri", talepTipiRoutes);
 const misafirTalepRoutes = require("./routes/misafirTalep.routes");
 app.use("/api/misafir-talep", misafirTalepRoutes);
 app.use("/api/me", require("./routes/me.routes"));
-const roleGroupRoutes = require('./routes/roleGroup.route');  
-app.use('/api', roleGroupRoutes);   // <-- EKLENDİ
+const roleGroupRoutes = require("./routes/roleGroup.route");
+app.use("/api", roleGroupRoutes); // <-- EKLENDİ
 const sehirlerRouter = require("./routes/sehirler");
 app.use("/api/sehirler", sehirlerRouter);
 // 🧠 MongoDB Bağlantısı
+const plakalarRouter = require("./routes/plakalar");
+app.use("/api/plakalar", plakalarRouter);
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
