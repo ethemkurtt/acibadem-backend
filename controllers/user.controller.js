@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/user.model");
+const RoleGroup = require("../models/roleGroup.model");
 
 // Yeni kullanıcı oluştur
 exports.createUser = async (req, res) => {
@@ -8,8 +9,9 @@ exports.createUser = async (req, res) => {
       name,
       email,
       password,
-      role,
-      access,
+      organizasyon,
+      personelGrubu,
+      roleGroupId,
       tc,
       departman,
       lokasyon,
@@ -20,26 +22,16 @@ exports.createUser = async (req, res) => {
       dogumTarihi,
       cinsiyet,
       ehliyet,
-      permissions, // page-bazlı izinler (Map/Object)
-      perms,       // ⭐ string[] kısa izinler
+      permissions,
+      perms
     } = req.body;
 
-    if (!name || !email || !password || !role) {
-      return res
-        .status(400)
-        .json({ error: "Ad, email, şifre ve rol zorunludur." });
+    if (!name || !email || !password || !personelGrubu || !roleGroupId || !organizasyon) {
+      return res.status(400).json({
+        error: "Ad, email, şifre, personelGrubu, roleGroupId ve organizasyon zorunludur."
+      });
     }
 
-    if (
-      access &&
-      (!Array.isArray(access) || access.some((v) => v < 1 || v > 100))
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
-    }
-
-    // ⭐ perms tip kontrolü
     if (perms && !Array.isArray(perms)) {
       return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
     }
@@ -53,8 +45,9 @@ exports.createUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role,
-      access: access || [],
+      organizasyon,
+      personelGrubu,
+      roleGroupId,
       tc: tc || null,
       departman: departman || null,
       lokasyon: lokasyon || null,
@@ -65,8 +58,8 @@ exports.createUser = async (req, res) => {
       dogumTarihi: dogumTarihi || null,
       cinsiyet: cinsiyet || null,
       ehliyet: ehliyet ?? false,
-      permissions: permissions || {}, // Map/Object ok
-      perms: perms || [],             // ⭐ KAYDET
+      permissions: permissions || {},
+      perms: perms || []
     });
 
     await newUser.save();
@@ -79,7 +72,7 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({
       message: "Kullanıcı oluşturuldu.",
-      user: userResponse(populatedUser),
+      user: await userResponse(populatedUser)
     });
   } catch (err) {
     console.error("createUser hatası:", err);
@@ -97,7 +90,8 @@ exports.getAllUsers = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    res.json(users.map(userResponse));
+    const enrichedUsers = await Promise.all(users.map(user => userResponse(user)));
+    res.json(enrichedUsers);
   } catch (err) {
     console.error("getAllUsers hatası:", err);
     res.status(500).json({ error: "Kullanıcılar getirilemedi." });
@@ -114,7 +108,7 @@ exports.getUserById = async (req, res) => {
       .populate("ulke", "ad");
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    res.json(userResponse(user));
+    res.json(await userResponse(user));
   } catch (err) {
     console.error("getUserById hatası:", err);
     res.status(500).json({ error: "Kullanıcı getirilemedi." });
@@ -127,17 +121,6 @@ exports.updateUser = async (req, res) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    if (
-      updateData.access &&
-      (!Array.isArray(updateData.access) ||
-        updateData.access.some((v) => v < 1 || v > 100))
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Access değerleri 1 ile 100 arasında olmalıdır." });
-    }
-
-    // ⭐ perms tip kontrolü
     if (updateData.perms && !Array.isArray(updateData.perms)) {
       return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
     }
@@ -148,11 +131,9 @@ exports.updateUser = async (req, res) => {
       delete updateData.password;
     }
 
-    // permissions nesnesi varsa bırakıyoruz (Map/object)
-    // findByIdAndUpdate default'ta validators çalışmaz → ⭐ etkinleştir
     const updated = await User.findByIdAndUpdate(id, updateData, {
       new: true,
-      runValidators: true, // ⭐
+      runValidators: true
     })
       .populate("departman", "ad")
       .populate("lokasyon", "ad")
@@ -161,7 +142,10 @@ exports.updateUser = async (req, res) => {
 
     if (!updated) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    res.json({ message: "Kullanıcı güncellendi.", user: userResponse(updated) });
+    res.json({
+      message: "Kullanıcı güncellendi.",
+      user: await userResponse(updated)
+    });
   } catch (err) {
     console.error("updateUser hatası:", err);
     res.status(500).json({ error: "Güncelleme başarısız." });
@@ -180,20 +164,41 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// Yardımcı: JSON response
-function userResponse(user) {
+// Yardımcı: Yetkileri birleştir ve kullanıcı cevabını hazırla
+async function userResponse(user) {
+  const group = await RoleGroup.findOne({ roleId: user.roleGroupId });
+
+  const groupPerms = Array.isArray(group?.yetkiler?.perms) ? group.yetkiler.perms : [];
+  const groupPermissions = group?.yetkiler?.permissions || {};
+
+  const userPerms = Array.isArray(user.perms) ? user.perms : [];
+  const userPermissions = user.permissions instanceof Map
+    ? Object.fromEntries(user.permissions)
+    : user.permissions || {};
+
+  const mergedPerms = Array.from(new Set([...groupPerms, ...userPerms]));
+
+  const mergedPermissions = { ...groupPermissions };
+  for (const [page, actions] of Object.entries(userPermissions)) {
+    mergedPermissions[page] = actions;
+  }
+
   return {
     id: user._id,
     name: user.name,
     email: user.email,
-    role: user.role,
-    access: user.access,
+    organizasyon: user.organizasyon || null,
+    personelGrubu: user.personelGrubu || null,
+    roleGroupId: user.roleGroupId,
+    roleGroupName: group?.roleName || null,
+
     tc: user.tc,
     telefon: user.telefon,
     mail: user.mail,
     dogumTarihi: user.dogumTarihi,
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
+
     departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
     lokasyon: user.lokasyon?._id || null,
@@ -203,13 +208,7 @@ function userResponse(user) {
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
 
-    // page-bazlı izinler (Map → düz objeye çevirme)
-    permissions:
-      user.permissions instanceof Map
-        ? Object.fromEntries(user.permissions)
-        : user.permissions || {},
-
-    // ⭐ kısa izinler: API çıktılarına EKLE
-    perms: Array.isArray(user.perms) ? user.perms : [],
+    perms: mergedPerms,
+    permissions: mergedPermissions
   };
 }

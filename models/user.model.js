@@ -1,4 +1,3 @@
-// models/user.model.js
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
@@ -7,24 +6,29 @@ const userSchema = new mongoose.Schema(
     email:       { type: String, required: true, unique: true },
     password:    { type: String, required: true },
 
-    // Mevcut alanlar (korunur)
-    role:        { type: String, required: true },          // backward-compat
-    access:      { type: [Number], default: [] },           // eski numerik erişimler (opsiyonel)
+    // ✅ Düz metin: Organizasyon
+    organizasyon: { type: String, required: true }, // Örn: "Destek Hizmetleri"
 
-    // Çoklu rol / string izin override (mevcut kurgun)
-    roles:       { type: [String], default: [] },           // ["Admin","Operasyon",...]
-    perms:       { type: [String], default: [] },           // ["hastane:list", "arac:export", ...]
+    // ✅ Düz metin: Personel Grubu
+    personelGrubu: { type: String, required: true }, // Örn: "Eleman"
 
-    // 🔹 Yeni: Sayfa-bazlı izinler (page -> actions[])
-    // Örn: { hastane: ["view","create","update"], sofor: ["view"] }
+    // ✅ roleGroupId → string olarak eşleşecek (RoleGroup.roleId)
+    roleGroupId: { type: String, required: true }, // Örn: "sofor"
+
+    // ✅ Kişiye özel kısa izinler
+    perms: { type: [String], default: [] }, // Örn: ["talepOlustur:personel"]
+
+    // ✅ Kişiye özel sayfa-aksiyon izinleri
     permissions: {
       type: Map,
       of: {
         type: [String],
         validate: {
-          validator: (arr) => (Array.isArray(arr) && arr.every(a =>
-            ["view","create","update","delete"].includes(String(a).toLowerCase())
-          )),
+          validator: (arr) =>
+            Array.isArray(arr) &&
+            arr.every(a =>
+              ["view", "create", "update", "delete"].includes(String(a).toLowerCase())
+            ),
           message: "permissions.* sadece 'view','create','update','delete' olabilir."
         },
         default: []
@@ -32,28 +36,23 @@ const userSchema = new mongoose.Schema(
       default: {}
     },
 
-    // ABAC / kapsam alanları (opsiyonel)
-    locations:   { type: [String], default: [] },           // örn. ["ACB-KOCAELI", "ACB-ATASEHIR"]
-
+    // 🔹 Diğer metadata alanları (opsiyonel)
+    locations:   { type: [String], default: [] },
     tc:          { type: String, default: null },
-
     departman:   { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
     lokasyon:    { type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon",  default: null },
     bolge:       { type: mongoose.Schema.Types.ObjectId, ref: "Bolge",     default: null },
     ulke:        { type: mongoose.Schema.Types.ObjectId, ref: "Ulke",      default: null },
-
     telefon:     { type: String, default: null },
     mail:        { type: String, default: null },
     dogumTarihi: { type: Date,   default: null },
     cinsiyet:    { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
-    ehliyet:     { type: Boolean, default: false },
-    assignedRoles: [{ type: mongoose.Schema.Types.ObjectId, ref: "RoleProfile", default: [] }],
-
+    ehliyet:     { type: Boolean, default: false }
   },
   { timestamps: true }
 );
 
-// Map alanını JSON'da düz objeye çevir (frontend kullanımını kolaylaştırır)
+// Map'i JSON'da düz objeye çevir
 if (!userSchema.options.toJSON) userSchema.options.toJSON = {};
 userSchema.options.toJSON.transform = function (doc, ret) {
   if (ret.permissions instanceof Map) {

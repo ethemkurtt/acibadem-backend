@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Excel'den plakaları MongoDB'ye import eder (lokal).
+ * Başlıksız Excel'den (sütun indexlerine göre) plakaları MongoDB'ye import eder.
  * - Excel: ./excels/plakalar.xlsx
+ * - Sütunlar: [0]=PLAKA, [1]=BÖLÜM, [2]=MARKA, [3]=TİP
  * - Upsert: plaka'ya göre (aynı plaka varsa günceller)
  * - lokasyonId=null, lokasyonAd="", status=true
- * - id/plaka/bolum/marka/tip Excel'den alınır
  */
 
 require("dotenv").config();
@@ -18,22 +18,19 @@ const Plaka = require("./models/Plaka"); // models/Plaka.js
 
 // Mongo bağlantısı
 const MONGODB_URI =
-  process.env.MONGODB_URI || "mongodb+srv://ethemkurt6154:GRt3N2X9trO6Vv82@acibadem.6fxtazv.mongodb.net/acibadem?retryWrites=true&w=majority&appName=acibadem";
+  process.env.MONGODB_URI ||
+  "mongodb+srv://ethemkurt6154:GRt3N2X9trO6Vv82@acibadem.6fxtazv.mongodb.net/acibadem?retryWrites=true&w=majority&appName=acibadem";
 
-const EXCEL_PATH = path.join(__dirname, "./excels/plakalar.xlsx");
+const EXCEL_PATH = path.join(__dirname, "./excels/test.xlsx");
 
+// Plaka normalize: UPPERCASE + tek boşluk + trim
+// (İstersen tamamen kıyas eşleşmesi için boşluk/tire vs. kaldırmak istersen:
+// return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); )
 function normalizePlaka(v) {
-  return String(v).replace(/\s+/g, " ").trim().toUpperCase();
-}
-
-function pick(row, keys) {
-  for (const k of keys) {
-    if (Object.prototype.hasOwnProperty.call(row, k)) {
-      const val = String(row[k] ?? "").trim();
-      if (val !== "") return val;
-    }
-  }
-  return "";
+  return String(v || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function main() {
@@ -47,48 +44,40 @@ async function main() {
 
   console.log("→ Excel okunuyor:", EXCEL_PATH);
   const wb = XLSX.readFile(EXCEL_PATH);
-  const sheet =
-    wb.Sheets["PLAKALAR"] ||
-    wb.Sheets["Plakalar"] ||
-    wb.Sheets[wb.SheetNames[0]];
-  if (!sheet) {
-    console.error('✖ Sayfa bulunamadı (örn. "PLAKALAR").');
+
+  // İlk sayfayı kullan (ya da wb.Sheets[wb.SheetNames[index]])
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  if (!sh) {
+    console.error("✖ Sayfa bulunamadı (ilk sheet yok).");
     process.exit(1);
   }
 
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  // Başlıksız okuma: header:1 -> Array-of-Arrays (row -> [col0, col1, ...])
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: "" });
   console.log("→ Satır sayısı:", rows.length);
-
-  const H = {
-    id:    ["ID", "Id", "id"],
-    plaka: ["PLAKA", "Plaka", "plaka"],
-    bolum: ["BÖLÜMÜ", "BÖLÜM", "BOLUMU", "BOLUM", "BİRİM", "BIRIM"],
-    marka: ["MARKA", "Marka", "marka"],
-    tip:   ["TİPİ", "TIPI", "TİP", "TIP", "MODEL"]
-  };
 
   const ops = [];
   let skipped = 0;
 
-  for (const row of rows) {
-    const plakaRaw = pick(row, H.plaka);
-    if (!plakaRaw) { skipped++; continue; }
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const plakaRaw = row[0];          // 1. sütun: plaka
+    const bolumRaw = row[1];          // 2. sütun: bölüm
+    const markaRaw = row[2];          // 3. sütun: marka
+    const tipRaw   = row[3];          // 4. sütun: tip
+
+    const plakaStr = String(plakaRaw || "").trim();
+    if (!plakaStr) { skipped++; continue; }
 
     const doc = {
-      plaka: normalizePlaka(plakaRaw),
-      bolum: pick(row, H.bolum) || undefined,
-      marka: pick(row, H.marka) || undefined,
-      tip:   pick(row, H.tip)   || undefined,
+      plaka: normalizePlaka(plakaStr),
+      bolum: String(bolumRaw || "").trim() || undefined,
+      marka: String(markaRaw || "").trim() || undefined,
+      tip:   String(tipRaw   || "").trim() || undefined,
       lokasyonId: null,
       lokasyonAd: "",
       status: true
     };
-
-    const idRaw = pick(row, H.id);
-    if (idRaw) {
-      const idNum = Number(idRaw);
-      if (!Number.isNaN(idNum)) doc.id = idNum;
-    }
 
     ops.push({
       updateOne: {
@@ -100,7 +89,7 @@ async function main() {
   }
 
   if (ops.length === 0) {
-    console.error("✖ Aktarılacak satır yok. (Boş dosya veya başlıklar eşleşmedi)");
+    console.error("✖ Aktarılacak satır yok. (Excel boş olabilir)");
     process.exit(1);
   }
 
