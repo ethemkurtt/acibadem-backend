@@ -58,8 +58,8 @@ exports.createUser = async (req, res) => {
       dogumTarihi: dogumTarihi || null,
       cinsiyet: cinsiyet || null,
       ehliyet: ehliyet ?? false,
-      permissions: permissions || {},
-      perms: perms || []
+      permissions: permissions || {}, // sadece kişisel yetkiler
+      perms: perms || []              // sadece kişisel yetkiler
     });
 
     await newUser.save();
@@ -164,7 +164,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// Yardımcı: Yetkileri birleştir ve kullanıcı cevabını hazırla
+// Kullanıcı + RoleGroup yetkilerini birleştirip düz response hazırla
 async function userResponse(user) {
   const group = await RoleGroup.findOne({ roleId: user.roleGroupId });
 
@@ -172,12 +172,23 @@ async function userResponse(user) {
   const groupPermissions = group?.yetkiler?.permissions || {};
 
   const userPerms = Array.isArray(user.perms) ? user.perms : [];
-  const userPermissions = user.permissions instanceof Map
-    ? Object.fromEntries(user.permissions)
-    : user.permissions || {};
 
+  // Mongoose Map koruması
+  let userPermissions = {};
+  if (user.permissions instanceof Map) {
+    userPermissions = Object.fromEntries(user.permissions);
+  } else if (typeof user.permissions === "object" && user.permissions !== null) {
+    for (const key of Object.keys(user.permissions)) {
+      if (!key.startsWith("$")) {
+        userPermissions[key] = user.permissions[key];
+      }
+    }
+  }
+
+  // 🔀 perms birleştir
   const mergedPerms = Array.from(new Set([...groupPerms, ...userPerms]));
 
+  // 🔀 permissions birleştir (user override eder)
   const mergedPermissions = { ...groupPermissions };
   for (const [page, actions] of Object.entries(userPermissions)) {
     mergedPermissions[page] = actions;
