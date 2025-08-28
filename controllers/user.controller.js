@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/user.model");
 const RoleGroup = require("../models/roleGroup.model");
 
-// Yeni kullanıcı oluştur
+// ✅ Yeni kullanıcı oluştur
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -26,6 +26,7 @@ exports.createUser = async (req, res) => {
       perms
     } = req.body;
 
+    // Zorunlu alan kontrolü
     if (!name || !email || !password || !personelGrubu || !roleGroupId || !organizasyon) {
       return res.status(400).json({
         error: "Ad, email, şifre, personelGrubu, roleGroupId ve organizasyon zorunludur."
@@ -80,7 +81,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// Tüm kullanıcılar
+// ✅ Tüm kullanıcıları getir
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -98,7 +99,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// Tek kullanıcı
+// ✅ Tek kullanıcıyı getir
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
@@ -115,7 +116,7 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// Güncelle
+// ✅ Kullanıcı güncelle
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,7 +153,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-// Sil
+// ✅ Kullanıcı sil
 exports.deleteUser = async (req, res) => {
   try {
     const deleted = await User.findByIdAndDelete(req.params.id);
@@ -164,31 +165,38 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// Kullanıcı + RoleGroup yetkilerini birleştirip düz response hazırla
+// ✅ Kullanıcı + RoleGroup yetkilerini birleştir ve düz response hazırla
 async function userResponse(user) {
   const group = await RoleGroup.findOne({ roleId: user.roleGroupId });
 
+  // RoleGroup yetkileri
+  let groupPermissions = {};
   const groupPerms = Array.isArray(group?.yetkiler?.perms) ? group.yetkiler.perms : [];
-  const groupPermissions = group?.yetkiler?.permissions || {};
 
+  if (group?.yetkiler?.permissions instanceof Map) {
+    groupPermissions = Object.fromEntries(group.yetkiler.permissions);
+  } else if (typeof group?.yetkiler?.permissions === "object" && group.yetkiler.permissions !== null) {
+    for (const [key, val] of Object.entries(group.yetkiler.permissions)) {
+      if (!key.startsWith("$")) groupPermissions[key] = val;
+    }
+  }
+
+  // User izinleri
   const userPerms = Array.isArray(user.perms) ? user.perms : [];
 
-  // Mongoose Map koruması
   let userPermissions = {};
   if (user.permissions instanceof Map) {
     userPermissions = Object.fromEntries(user.permissions);
   } else if (typeof user.permissions === "object" && user.permissions !== null) {
-    for (const key of Object.keys(user.permissions)) {
-      if (!key.startsWith("$")) {
-        userPermissions[key] = user.permissions[key];
-      }
+    for (const [key, val] of Object.entries(user.permissions)) {
+      if (!key.startsWith("$")) userPermissions[key] = val;
     }
   }
 
   // 🔀 perms birleştir
   const mergedPerms = Array.from(new Set([...groupPerms, ...userPerms]));
 
-  // 🔀 permissions birleştir (user override eder)
+  // 🔀 permissions birleştir
   const mergedPermissions = { ...groupPermissions };
   for (const [page, actions] of Object.entries(userPermissions)) {
     mergedPermissions[page] = actions;
