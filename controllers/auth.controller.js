@@ -5,7 +5,7 @@ const jwt    = require("jsonwebtoken");
 
 const User = require("../models/user.model");
 const Role = require("../models/role.model");
-const { sendMail } = require("../utils/mailler");
+const { sendMail } = require("../utils/mailer");
 
 // Kullanıcının tıklayacağı FRONTEND adresi (ENV KULLANMADAN SABİT)
 const FRONTEND_BASE_URL = "https://acibadem.arndevelopment.com.tr"; // örn: https://panel.senin-domainin.com
