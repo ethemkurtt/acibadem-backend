@@ -9,28 +9,38 @@ const { authRequired: authenticate } = require("../middlewares/auth");
 // Rol kontrolü (factory olmalı: requireRole("role") => (req,res,next) => ...)
 const { requireRole } = require("../middlewares/authz");
 
-// Eğer ayrı bir isSuperAdmin middleware'in varsa kullanmak istersen:
-// const isSuperAdmin = require("../middlewares/isSuperAdmin");
-
+// Controller'lar
 const authController = require("../controllers/auth.controller");
 const userController = require("../controllers/user.controller");
 
-// ================== Giriş ==================
+/* ============================================================================
+ *  AUTH
+ * ===========================================================================*/
+
+// Giriş
 router.post("/login", authController.login);
 
-// ================== Süperadmin Panel Örneği ==================
-router.get(
-  "/admin/panel",
-  authenticate,                 // önce JWT
-  requireRole("superadmin"),    // sonra rol kontrolü
-  (req, res) => res.json({ message: "Süper admin paneline hoş geldiniz." })
-);
+// Şifre Sıfırlama (public)
+router.post("/auth/forgot",       authController.forgotPassword);
+router.get ("/auth/reset/verify", authController.verifyResetToken);
+router.post("/auth/reset",        authController.resetPassword);
 
-// ================== Kullanıcı CRUD ==================
 // Kendi profilini getir (JWT zorunlu)
 router.get("/me", authenticate, authController.getMe);
 
-// /users altındaki tüm rotalar için JWT zorunlu
+/* ============================================================================
+ *  Süperadmin örnek uç
+ * ===========================================================================*/
+router.get(
+  "/admin/panel",
+  authenticate,              // önce JWT
+  requireRole("superadmin"), // sonra rol kontrolü
+  (req, res) => res.json({ message: "Süper admin paneline hoş geldiniz." })
+);
+
+/* ============================================================================
+ *  USERS (JWT zorunlu)
+ * ===========================================================================*/
 router.use("/users", authenticate);
 
 // Listele
@@ -45,9 +55,9 @@ router.put("/users/:id", userController.updateUser);
 // Sil
 router.delete("/users/:id", userController.deleteUser);
 
-// Oluştur (yalnızca superadmin)
+// Oluştur (istersen burada role/middleware kontrolü ekleyebilirsin)
 router.post("/users", userController.createUser);
-// Alternatif: eğer ayrı bir isSuperAdmin middleware'in varsa üstteki satırı şu şekilde de yazabilirsin:
-// router.post("/users", isSuperAdmin, userController.createUser);
+// Örn: yalnızca süperadmin olsun dersen:
+// router.post("/users", requireRole("superadmin"), userController.createUser);
 
 module.exports = router;
