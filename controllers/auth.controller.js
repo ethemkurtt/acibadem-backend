@@ -10,8 +10,9 @@ const Role = require("../models/role.model");
 const { sendMail } = require("../utils/mailer");
 
 // FRONTEND adresini .env'den oku, yoksa sabit değere düş (prod'da .env kullanın)
-const FRONTEND_BASE_URL =
-  (process.env.FRONTEND_BASE_URL || "https://acibadem.arndevelopment.com.tr").replace(/\/+$/, "");
+const FRONTEND_BASE_URL = (
+  process.env.FRONTEND_BASE_URL || "https://acibadem.arndevelopment.com.tr"
+).replace(/\/+$/, "");
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Yardımcılar
@@ -19,7 +20,9 @@ const FRONTEND_BASE_URL =
 
 // string permission birleştirici (role.permissions + user.perms → benzersiz)
 function buildEffectivePerms(user, roleDoc) {
-  const rolePerms = Array.isArray(roleDoc?.permissions) ? roleDoc.permissions : [];
+  const rolePerms = Array.isArray(roleDoc?.permissions)
+    ? roleDoc.permissions
+    : [];
   const userPerms = Array.isArray(user.perms) ? user.perms : [];
   return Array.from(new Set([...rolePerms, ...userPerms]));
 }
@@ -67,7 +70,9 @@ function getJwtSecret() {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const email = String(req.body.email || "").toLowerCase().trim();
+    const email = String(req.body.email || "")
+      .toLowerCase()
+      .trim();
     const password = String(req.body.password || "");
 
     if (!email || !password) {
@@ -164,7 +169,9 @@ exports.getMe = async (req, res) => {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.forgotPassword = async (req, res) => {
   try {
-    const email = String(req.body.email || "").toLowerCase().trim();
+    const email = String(req.body.email || "")
+      .toLowerCase()
+      .trim();
     if (!email) return res.status(400).json({ error: "E-posta zorunludur." });
 
     const user = await User.findOne({ email });
@@ -187,22 +194,41 @@ exports.forgotPassword = async (req, res) => {
     const resetUrl = `${FRONTEND_BASE_URL}/sifre-sifirla/verify?token=${rawToken}`;
 
     const html = `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
-        <div style="text-align:center;margin-bottom:16px">
-          <strong style="font-size:18px">Acıbadem Portal</strong>
-        </div>
-        <h2 style="font-size:20px;margin:0 0 12px">Şifre Sıfırlama</h2>
-        <div style="font-size:14px;line-height:1.6">
-          <p>Şifrenizi sıfırlamak için aşağıdaki düğmeye tıklayın. Bu bağlantı <b>1 saat</b> geçerlidir.</p>
-          <p style="margin:20px 0">
-            <a href="${resetUrl}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#111;color:#fff;text-decoration:none">Şifreyi Sıfırla</a>
-          </p>
-          <p style="word-break:break-all;color:#555">${resetUrl}</p>
-          <hr style="margin:24px 0;border:none;border-top:1px solid #eee"/>
-          <div style="font-size:12px;color:#666">Bu e-posta otomatik gönderildi. Siz talep etmediyseniz görmezden gelebilirsiniz.</div>
-        </div>
+  <div style="background:#f9fafb;padding:32px 0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.08);overflow:hidden">
+      
+      <!-- Header -->
+      <div style="background:#111;color:#fff;padding:20px;text-align:center;font-size:20px;font-weight:bold">
+        Acıbadem Portal
       </div>
-    `;
+
+      <!-- Body -->
+      <div style="padding:32px;color:#111;font-size:15px;line-height:1.6">
+        <h2 style="margin-top:0;margin-bottom:12px;font-size:22px">Şifre Sıfırlama</h2>
+        <p>Merhaba,</p>
+        <p>Şifrenizi sıfırlamak için aşağıdaki düğmeye tıklayın. Bu bağlantı 
+          <b style="color:#d6336c">1 saat</b> boyunca geçerlidir.</p>
+
+        <div style="text-align:center;margin:28px 0">
+          <a href="${resetUrl}"
+             style="display:inline-block;padding:12px 20px;background:#111;color:#fff;
+                    text-decoration:none;border-radius:6px;font-weight:500;font-size:15px">
+            🔑 Şifreyi Sıfırla
+          </a>
+        </div>
+
+        <p style="font-size:13px;color:#555">Eğer buton çalışmazsa aşağıdaki bağlantıyı tarayıcınıza yapıştırın:</p>
+        <p style="word-break:break-all;font-size:13px;color:#444">${resetUrl}</p>
+
+        <hr style="margin:28px 0;border:none;border-top:1px solid #eee"/>
+
+        <p style="font-size:12px;color:#777;text-align:center">
+          Bu e-posta otomatik gönderildi. Siz talep etmediyseniz görmezden gelebilirsiniz.
+        </p>
+      </div>
+    </div>
+  </div>
+`;
 
     await sendMail({
       to: user.email,
@@ -261,15 +287,11 @@ exports.resetPassword = async (req, res) => {
     const password = String(req.body.password || "");
 
     if (!token || !password) {
-      return res
-        .status(400)
-        .json({ error: "Token ve yeni şifre zorunludur." });
+      return res.status(400).json({ error: "Token ve yeni şifre zorunludur." });
     }
 
     if (password.length < 8) {
-      return res
-        .status(400)
-        .json({ error: "Şifre en az 8 karakter olmalı." });
+      return res.status(400).json({ error: "Şifre en az 8 karakter olmalı." });
     }
 
     const hashed = crypto.createHash("sha256").update(token).digest("hex");
