@@ -1,14 +1,17 @@
 // controllers/auth.controller.js
+// Tamamen düzenlenmiş sürüm – güvenli ENV kullanımı, e-posta normalize, küçük sağlamlaştırmalar
+
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
-const jwt    = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 
 const User = require("../models/user.model");
 const Role = require("../models/role.model");
 const { sendMail } = require("../utils/mailer");
 
-// Kullanıcının tıklayacağı FRONTEND adresi (ENV KULLANMADAN SABİT)
-const FRONTEND_BASE_URL = "https://acibadem.arndevelopment.com.tr"; // örn: https://panel.senin-domainin.com
+// FRONTEND adresini .env'den oku, yoksa sabit değere düş (prod'da .env kullanın)
+const FRONTEND_BASE_URL =
+  (process.env.FRONTEND_BASE_URL || "https://acibadem.arndevelopment.com.tr").replace(/\/+$/, "");
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Yardımcılar
@@ -43,15 +46,20 @@ function userResponse(user, access, perms) {
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
 
-    departman:     user.departman?._id || null,
+    departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
-    lokasyon:      user.lokasyon?._id || null,
-    lokasyonName:  user.lokasyon?.ad || null,
-    bolge:         user.bolge?._id || null,
-    bolgeName:     user.bolge?.ad || null,
-    ulke:          user.ulke?._id || null,
-    ulkeName:      user.ulke?.ad || null,
+    lokasyon: user.lokasyon?._id || null,
+    lokasyonName: user.lokasyon?.ad || null,
+    bolge: user.bolge?._id || null,
+    bolgeName: user.bolge?.ad || null,
+    ulke: user.ulke?._id || null,
+    ulkeName: user.ulke?.ad || null,
   };
+}
+
+// Güvenli JWT secret
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "dev-secret";
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -59,7 +67,12 @@ function userResponse(user, access, perms) {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body.email || "").toLowerCase().trim();
+    const password = String(req.body.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "E-posta ve şifre zorunludur." });
+    }
 
     const user = await User.findOne({ email })
       .populate("departman", "ad")
@@ -67,7 +80,11 @@ exports.login = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
+    if (!user) {
+      // İsterseniz enumeration önlemek için mesajı birleştirebilirsiniz:
+      // return res.status(401).json({ error: "E-posta veya şifre hatalı." });
+      return res.status(401).json({ error: "Kullanıcı bulunamadı." });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password || "");
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
@@ -78,7 +95,7 @@ exports.login = async (req, res) => {
       roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
     } else {
       const roleByName = await Role.findOne({ name: user.role });
-      roleAccess = roleByName ? (roleByName.access || []) : [];
+      roleAccess = roleByName ? roleByName.access || [] : [];
     }
     const finalAccess = [...new Set([...(user.access || []), ...roleAccess])];
 
@@ -88,13 +105,13 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       {
-        id:   user._id,
+        id: user._id,
         role: user.role,
         access: finalAccess,
         roles: user.roles || [],
-        perms: finalPerms
+        perms: finalPerms,
       },
-      process.env.JWT_SECRET || "dev-secret", // gerekirse sabit
+      getJwtSecret(),
       { expiresIn: "7d" }
     );
 
@@ -109,7 +126,7 @@ exports.login = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
@@ -121,7 +138,7 @@ exports.getMe = async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ error: "Token bulunamadı." });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev-secret");
+    const decoded = jwt.verify(token, getJwtSecret());
 
     const user = await User.findById(decoded.id)
       .select("-password")
@@ -132,10 +149,12 @@ exports.getMe = async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    res.json({ user: userResponse(user, decoded.access || [], decoded.perms || []) });
+    return res.json({
+      user: userResponse(user, decoded.access || [], decoded.perms || []),
+    });
   } catch (err) {
     console.error("getMe error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
@@ -152,27 +171,36 @@ exports.forgotPassword = async (req, res) => {
 
     // Enumeration engelle: var/yok fark etmeksizin aynı yanıt
     if (!user) {
-      return res.json({ message: "Eğer e-posta kayıtlıysa, sıfırlama bağlantısı gönderildi." });
+      return res.json({
+        message: "Eğer e-posta kayıtlıysa, sıfırlama bağlantısı gönderildi.",
+      });
     }
 
     // Token üret → DB'ye HASH yaz (ham token mailde gidecek)
     const rawToken = crypto.randomBytes(32).toString("hex");
-    const hashed   = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const hashed = crypto.createHash("sha256").update(rawToken).digest("hex");
 
-    user.resetPasswordToken   = hashed;
+    user.resetPasswordToken = hashed;
     user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 saat
     await user.save();
 
-    const base = FRONTEND_BASE_URL.replace(/\/+$/, "");
-    const resetUrl = `${base}/sifre-sifirla/verify?token=${rawToken}`;
+    const resetUrl = `${FRONTEND_BASE_URL}/sifre-sifirla/verify?token=${rawToken}`;
 
     const html = `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
-        <h2>Şifre Sıfırlama</h2>
-        <p>Şifrenizi sıfırlamak için aşağıdaki bağlantıya tıklayın. Bu bağlantı <b>1 saat</b> geçerlidir.</p>
-        <p><a href="${resetUrl}" target="_blank">${resetUrl}</a></p>
-        <hr/>
-        <p>Eğer bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
+        <div style="text-align:center;margin-bottom:16px">
+          <strong style="font-size:18px">Acıbadem Portal</strong>
+        </div>
+        <h2 style="font-size:20px;margin:0 0 12px">Şifre Sıfırlama</h2>
+        <div style="font-size:14px;line-height:1.6">
+          <p>Şifrenizi sıfırlamak için aşağıdaki düğmeye tıklayın. Bu bağlantı <b>1 saat</b> geçerlidir.</p>
+          <p style="margin:20px 0">
+            <a href="${resetUrl}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#111;color:#fff;text-decoration:none">Şifreyi Sıfırla</a>
+          </p>
+          <p style="word-break:break-all;color:#555">${resetUrl}</p>
+          <hr style="margin:24px 0;border:none;border-top:1px solid #eee"/>
+          <div style="font-size:12px;color:#666">Bu e-posta otomatik gönderildi. Siz talep etmediyseniz görmezden gelebilirsiniz.</div>
+        </div>
       </div>
     `;
 
@@ -183,7 +211,9 @@ exports.forgotPassword = async (req, res) => {
       html,
     });
 
-    return res.json({ message: "Eğer e-posta kayıtlıysa, sıfırlama bağlantısı gönderildi." });
+    return res.json({
+      message: "Eğer e-posta kayıtlıysa, sıfırlama bağlantısı gönderildi.",
+    });
   } catch (err) {
     console.error("forgotPassword error:", err);
     return res.status(500).json({ error: "İşlem yapılamadı." });
@@ -191,13 +221,16 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-// PASSWORD RESET: token doğrula
-// GET /api/auth/reset/verify?token=RAW_TOKEN
+/*
+PASSWORD RESET: token doğrula
+GET /api/auth/reset/verify?token=RAW_TOKEN
+*/
 // ───────────────────────────────────────────────────────────────────────────────
 exports.verifyResetToken = async (req, res) => {
   try {
     const { token } = req.query;
-    if (!token) return res.status(400).json({ valid: false, error: "Token gerekli." });
+    if (!token)
+      return res.status(400).json({ valid: false, error: "Token gerekli." });
 
     const hashed = crypto.createHash("sha256").update(token).digest("hex");
 
@@ -208,7 +241,7 @@ exports.verifyResetToken = async (req, res) => {
 
     if (!user) return res.json({ valid: false });
 
-    // İstersen e-posta gönderelim (formda göstermek için)
+    // İsterseniz formda e-posta göstermek için dönüyoruz
     return res.json({ valid: true, email: user.email });
   } catch (err) {
     console.error("verifyResetToken error:", err);
@@ -217,17 +250,26 @@ exports.verifyResetToken = async (req, res) => {
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-// PASSWORD RESET: yeni şifre belirle
-// POST /api/auth/reset { token, password }
+/*
+PASSWORD RESET: yeni şifre belirle
+POST /api/auth/reset { token, password }
+*/
 // ───────────────────────────────────────────────────────────────────────────────
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const token = String(req.body.token || "");
+    const password = String(req.body.password || "");
+
     if (!token || !password) {
-      return res.status(400).json({ error: "Token ve yeni şifre zorunludur." });
+      return res
+        .status(400)
+        .json({ error: "Token ve yeni şifre zorunludur." });
     }
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: "Şifre en az 8 karakter olmalı." });
+
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ error: "Şifre en az 8 karakter olmalı." });
     }
 
     const hashed = crypto.createHash("sha256").update(token).digest("hex");
@@ -236,14 +278,19 @@ exports.resetPassword = async (req, res) => {
       resetPasswordExpires: { $gt: new Date() },
     });
 
-    if (!user) return res.status(400).json({ error: "Token geçersiz veya süresi dolmuş." });
+    if (!user)
+      return res
+        .status(400)
+        .json({ error: "Token geçersiz veya süresi dolmuş." });
 
     user.password = await bcrypt.hash(password, 10);
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
     await user.save();
 
-    return res.json({ message: "Şifre başarıyla güncellendi. Giriş yapabilirsiniz." });
+    return res.json({
+      message: "Şifre başarıyla güncellendi. Giriş yapabilirsiniz.",
+    });
   } catch (err) {
     console.error("resetPassword error:", err);
     return res.status(500).json({ error: "İşlem yapılamadı." });
