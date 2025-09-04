@@ -1,5 +1,6 @@
 // controllers/auth.controller.js
-// Tamamen düzenlenmiş sürüm – güvenli ENV kullanımı, e-posta normalize, küçük sağlamlaştırmalar
+// Tam sürüm – RoleGroup & Role yetki birleştirme, güvenli ENV, e-posta normalize,
+// tutarlı login/getMe hesaplaması, küçük sağlamlaştırmalar.
 
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -7,9 +8,10 @@ const jwt = require("jsonwebtoken");
 
 const User = require("../models/user.model");
 const Role = require("../models/role.model");
+const RoleGroup = require("../models/roleGroup.model"); // ⬅️ eklendi
 const { sendMail } = require("../utils/mailer");
 
-// FRONTEND adresini .env'den oku, yoksa sabit değere düş (prod'da .env kullanın)
+// FRONTEND adresi (.env'den), sonda / temizlenir
 const FRONTEND_BASE_URL = (
   process.env.FRONTEND_BASE_URL || "https://acibadem.arndevelopment.com.tr"
 ).replace(/\/+$/, "");
@@ -18,17 +20,124 @@ const FRONTEND_BASE_URL = (
 // Yardımcılar
 // ───────────────────────────────────────────────────────────────────────────────
 
-// string permission birleştirici (role.permissions + user.perms → benzersiz)
-function buildEffectivePerms(user, roleDoc) {
-  const rolePerms = Array.isArray(roleDoc?.permissions)
-    ? roleDoc.permissions
-    : [];
-  const userPerms = Array.isArray(user.perms) ? user.perms : [];
-  return Array.from(new Set([...rolePerms, ...userPerms]));
+// JWT secret
+function getJwtSecret() {
+  return process.env.JWT_SECRET || "dev-secret";
 }
 
-// Response formatter (mevcut alanlar + perms/roles)
-function userResponse(user, access, perms) {
+// Map veya düz objeyi güvenli şekilde "sade obje"ye çevir
+function mapLikeToPlainObject(input) {
+  if (!input) return {};
+  if (input instanceof Map) return Object.fromEntries(input);
+  if (typeof input === "object") return { ...input };
+  return {};
+}
+
+// "$" ile başlayan anahtarları filtrele (Mongo internal vb.)
+function stripDollarKeys(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (!k.startsWith("$")) out[k] = v;
+  }
+  return out;
+}
+
+// Sayfa bazlı permissions (obj) birleştirme: group → user override
+function mergePagePermissions(groupObj, userObj) {
+  const base = stripDollarKeys(mapLikeToPlainObject(groupObj));
+  const user = stripDollarKeys(mapLikeToPlainObject(userObj));
+  return { ...base, ...user }; // user aynı sayfayı yazdıysa override
+}
+
+// String perms birleştirici (unique)
+function mergeStringPerms(...lists) {
+  const flat = lists
+    .filter(Array.isArray)
+    .flat()
+    .filter((x) => typeof x === "string");
+  return Array.from(new Set(flat));
+}
+
+// Numerik access birleştirici (unique)
+function mergeNumericAccess(...lists) {
+  const flat = lists
+    .filter(Array.isArray)
+    .flat()
+    .filter((x) => Number.isFinite(x));
+  return Array.from(new Set(flat));
+}
+
+// Kullanıcının RoleGroup kaydını esnek şekilde bul (id/roleId/roleName)
+async function findRoleGroupForUser(user) {
+  if (!user?.roleGroupId) return null;
+
+  // Çeşitli veri durumlarını karşılamak için geniş arama
+  const q = {
+    $or: [
+      { _id: user.roleGroupId },
+      { roleId: user.roleGroupId },
+      { roleName: user.roleGroupId },
+    ],
+  };
+  try {
+    const doc = await RoleGroup.findOne(q);
+    return doc || null;
+  } catch {
+    // Bazı durumlarda ObjectId cast hatası olabilir; string olarak tekrar denemek isterseniz:
+    try {
+      const doc = await RoleGroup.findOne({
+        $or: [{ roleId: String(user.roleGroupId) }, { roleName: String(user.roleGroupId) }],
+      });
+      return doc || null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+// Kullanıcının Role kaydını bul (name ile)
+async function findPrimaryRoleDoc(user) {
+  if (!user?.role) return null;
+  try {
+    const doc = await Role.findOne({ name: user.role });
+    return doc || null;
+  } catch {
+    return null;
+  }
+}
+
+// Numerik access hesapla (mevcut mantık korunarak)
+async function computeAccess(user, roleDoc) {
+  let roleAccess = [];
+  if (user.role === "superadmin") {
+    roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
+  } else {
+    roleAccess = Array.isArray(roleDoc?.access) ? roleDoc.access : [];
+  }
+  return mergeNumericAccess(user.access || [], roleAccess);
+}
+
+// Tüm yetkileri konsolide et (string perms + sayfa bazlı permissions)
+async function computeAllPermissions(user) {
+  const roleDoc = await findPrimaryRoleDoc(user);
+  const groupDoc = await findRoleGroupForUser(user);
+
+  // String perms
+  const rolePerms = Array.isArray(roleDoc?.permissions) ? roleDoc.permissions : [];
+  const groupPerms = Array.isArray(groupDoc?.yetkiler?.perms) ? groupDoc.yetkiler.perms : [];
+  const userPerms = Array.isArray(user?.perms) ? user.perms : [];
+  const finalPerms = mergeStringPerms(rolePerms, groupPerms, userPerms);
+
+  // Sayfa bazlı permissions (obj)
+  const groupPermsObj = mapLikeToPlainObject(groupDoc?.yetkiler?.permissions);
+  const userPermsObj = mapLikeToPlainObject(user?.permissions);
+  const mergedPermissions = mergePagePermissions(groupPermsObj, userPermsObj);
+
+  return { finalPerms, mergedPermissions, roleDoc };
+}
+
+// FE’ye dönecek kullanıcı formatı
+function userResponse(user, access, perms, mergedPermissions) {
   return {
     id: user._id,
     name: user.name,
@@ -36,12 +145,14 @@ function userResponse(user, access, perms) {
 
     // backward-compat
     role: user.role,
-    access: access,
+    access,
 
     // yeni RBAC alanları
     roles: user.roles || [],
     perms: perms || [],
+    permissions: mergedPermissions || {},
 
+    // profil alanları
     tc: user.tc,
     telefon: user.telefon,
     mail: user.mail,
@@ -49,6 +160,7 @@ function userResponse(user, access, perms) {
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
 
+    // referanslar
     departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
     lokasyon: user.lokasyon?._id || null,
@@ -60,19 +172,12 @@ function userResponse(user, access, perms) {
   };
 }
 
-// Güvenli JWT secret
-function getJwtSecret() {
-  return process.env.JWT_SECRET || "dev-secret";
-}
-
 // ───────────────────────────────────────────────────────────────────────────────
 // AUTH: Login
 // ───────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const email = String(req.body.email || "")
-      .toLowerCase()
-      .trim();
+    const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
 
     if (!email || !password) {
@@ -86,27 +191,16 @@ exports.login = async (req, res) => {
       .populate("ulke", "ad");
 
     if (!user) {
-      // İsterseniz enumeration önlemek için mesajı birleştirebilirsiniz:
-      // return res.status(401).json({ error: "E-posta veya şifre hatalı." });
+      // enumeration azaltmak isterseniz aynı mesaj kullanın
       return res.status(401).json({ error: "Kullanıcı bulunamadı." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password || "");
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
-    // numerik ACCESS (mevcut sistem)
-    let roleAccess = [];
-    if (user.role === "superadmin") {
-      roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
-    } else {
-      const roleByName = await Role.findOne({ name: user.role });
-      roleAccess = roleByName ? roleByName.access || [] : [];
-    }
-    const finalAccess = [...new Set([...(user.access || []), ...roleAccess])];
-
-    // string PERMISSIONS (yeni RBAC)
-    const primaryRoleDoc = await Role.findOne({ name: user.role });
-    const finalPerms = buildEffectivePerms(user, primaryRoleDoc);
+    // Tüm perms/permissions hesapla + access
+    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
+    const finalAccess = await computeAccess(user, roleDoc);
 
     const token = jwt.sign(
       {
@@ -115,6 +209,7 @@ exports.login = async (req, res) => {
         access: finalAccess,
         roles: user.roles || [],
         perms: finalPerms,
+        permissions: mergedPermissions, // FE ihtiyaç duyarsa token içinden de okunabilir
       },
       getJwtSecret(),
       { expiresIn: "7d" }
@@ -127,7 +222,8 @@ exports.login = async (req, res) => {
       access: finalAccess,
       perms: finalPerms,
       roles: user.roles || [],
-      user: userResponse(user, finalAccess, finalPerms),
+      permissions: mergedPermissions,
+      user: userResponse(user, finalAccess, finalPerms, mergedPermissions),
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -154,11 +250,27 @@ exports.getMe = async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
+    // Tutarlılık için yetkileri DB'den yeniden hesapla
+    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
+    const finalAccess = await computeAccess(user, roleDoc);
+
     return res.json({
-      user: userResponse(user, decoded.access || [], decoded.perms || []),
+      user: userResponse(user, finalAccess, finalPerms, mergedPermissions),
+      role: user.role,
+      access: finalAccess,
+      perms: finalPerms,
+      roles: user.roles || [],
+      permissions: mergedPermissions,
     });
   } catch (err) {
     console.error("getMe error:", err);
+    // Token süresi dolmuş vs.
+    if (err?.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Oturum süresi doldu." });
+    }
+    if (err?.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Geçersiz token." });
+    }
     return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
@@ -169,9 +281,7 @@ exports.getMe = async (req, res) => {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.forgotPassword = async (req, res) => {
   try {
-    const email = String(req.body.email || "")
-      .toLowerCase()
-      .trim();
+    const email = String(req.body.email || "").toLowerCase().trim();
     if (!email) return res.status(400).json({ error: "E-posta zorunludur." });
 
     const user = await User.findOne({ email });
@@ -196,19 +306,14 @@ exports.forgotPassword = async (req, res) => {
     const html = `
   <div style="background:#f9fafb;padding:32px 0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
     <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.08);overflow:hidden">
-      
-      <!-- Header -->
       <div style="background:#111;color:#fff;padding:20px;text-align:center;font-size:20px;font-weight:bold">
         Acıbadem Portal
       </div>
-
-      <!-- Body -->
       <div style="padding:32px;color:#111;font-size:15px;line-height:1.6">
         <h2 style="margin-top:0;margin-bottom:12px;font-size:22px">Şifre Sıfırlama</h2>
         <p>Merhaba,</p>
         <p>Şifrenizi sıfırlamak için aşağıdaki düğmeye tıklayın. Bu bağlantı 
           <b style="color:#d6336c">1 saat</b> boyunca geçerlidir.</p>
-
         <div style="text-align:center;margin:28px 0">
           <a href="${resetUrl}"
              style="display:inline-block;padding:12px 20px;background:#111;color:#fff;
@@ -216,12 +321,9 @@ exports.forgotPassword = async (req, res) => {
             🔑 Şifreyi Sıfırla
           </a>
         </div>
-
         <p style="font-size:13px;color:#555">Eğer buton çalışmazsa aşağıdaki bağlantıyı tarayıcınıza yapıştırın:</p>
         <p style="word-break:break-all;font-size:13px;color:#444">${resetUrl}</p>
-
         <hr style="margin:28px 0;border:none;border-top:1px solid #eee"/>
-
         <p style="font-size:12px;color:#777;text-align:center">
           Bu e-posta otomatik gönderildi. Siz talep etmediyseniz görmezden gelebilirsiniz.
         </p>
@@ -247,10 +349,8 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-/*
-PASSWORD RESET: token doğrula
-GET /api/auth/reset/verify?token=RAW_TOKEN
-*/
+// PASSWORD RESET: token doğrula
+// GET /api/auth/reset/verify?token=RAW_TOKEN
 // ───────────────────────────────────────────────────────────────────────────────
 exports.verifyResetToken = async (req, res) => {
   try {
@@ -267,7 +367,7 @@ exports.verifyResetToken = async (req, res) => {
 
     if (!user) return res.json({ valid: false });
 
-    // İsterseniz formda e-posta göstermek için dönüyoruz
+    // Formda e-posta göstermek isterseniz:
     return res.json({ valid: true, email: user.email });
   } catch (err) {
     console.error("verifyResetToken error:", err);
@@ -276,10 +376,8 @@ exports.verifyResetToken = async (req, res) => {
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-/*
-PASSWORD RESET: yeni şifre belirle
-POST /api/auth/reset { token, password }
-*/
+// PASSWORD RESET: yeni şifre belirle
+// POST /api/auth/reset { token, password }
 // ───────────────────────────────────────────────────────────────────────────────
 exports.resetPassword = async (req, res) => {
   try {
