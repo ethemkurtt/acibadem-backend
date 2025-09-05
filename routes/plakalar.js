@@ -10,5 +10,5 @@ router.post("/", ctrl.create);
 router.put("/:id", ctrl.update);
 router.patch("/:id", ctrl.patch);
 router.delete("/:id", ctrl.remove);
-router.get("/araclar", auth, ctrl.getAktifAraclar);
+router.get("/araclar",  ctrl.getAktifAraclar);
 module.exports = router;
