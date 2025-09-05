@@ -95,8 +95,7 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: "Silme hatası", error: err.message });
   }
 };
-// GET /api/araclar
-const Plaka = require("../models/Plaka");
+
 
 exports.getAktifAraclar = async (req, res) => {
   try {
