@@ -217,3 +217,64 @@ exports.deleteHastaTalep = async (req, res) => {
     res.status(500).json({ error: "Silme hatası", details: err.message });
   }
 };
+exports.getTaleplerByLokasyon = async (req, res) => {
+  try {
+    const lokasyonId = req.user.lokasyon;
+
+    const talepler = await HastaTalep.find({ lokasyon: lokasyonId })
+      .populate("companions")
+      .populate("routes")
+      .populate("notificationPerson")
+      .populate("arac", "plaka marka tip")
+      .populate("sofor", "name telefon")
+      .populate("lokasyon", "ad");
+
+    res.json(talepler);
+  } catch (err) {
+    res.status(500).json({ error: "Talepler alınamadı." });
+  }
+};
+exports.assignAracSofor = async (req, res) => {
+  try {
+    const { soforId, aracId } = req.body;
+    const { id } = req.params;
+
+    const updatedTalep = await HastaTalep.findByIdAndUpdate(
+      id,
+      {
+        sofor: soforId,
+        arac: aracId,
+        atamaDurumu: "Evet",
+      },
+      { new: true }
+    )
+      .populate("arac", "plaka marka tip")
+      .populate("sofor", "name telefon");
+
+    res.json({ message: "Atama başarılı", talep: updatedTalep });
+  } catch (err) {
+    res.status(500).json({ error: "Atama yapılamadı", details: err.message });
+  }
+};
+exports.getBekleyenTalepler = async (req, res) => {
+  try {
+    const lokasyonId = req.user.lokasyon;
+
+    if (!lokasyonId) {
+      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+    }
+
+    const bekleyenTalepler = await HastaTalep.find({
+      lokasyon: lokasyonId,
+      atamaDurumu: "Hayır"
+    })
+      .populate("arac", "plaka marka tip")
+      .populate("sofor", "name telefon")
+      .populate("lokasyon", "ad");
+
+    res.json(bekleyenTalepler);
+  } catch (err) {
+    console.error("Bekleyen talepler alınamadı:", err);
+    res.status(500).json({ error: "Talepler alınamadı." });
+  }
+};

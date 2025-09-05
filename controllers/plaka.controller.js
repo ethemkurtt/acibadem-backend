@@ -95,3 +95,16 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: "Silme hatası", error: err.message });
   }
 };
+// GET /api/araclar
+const Plaka = require("../models/Plaka");
+
+exports.getAktifAraclar = async (req, res) => {
+  try {
+    const araclar = await Plaka.find({ status: true })
+      .select("plaka marka tip lokasyonId lokasyonAd");
+
+    res.json(araclar);
+  } catch (err) {
+    res.status(500).json({ error: "Araç listesi alınamadı." });
+  }
+};

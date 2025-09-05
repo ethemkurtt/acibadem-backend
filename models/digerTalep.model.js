@@ -5,16 +5,20 @@ const toNullIfEmpty = (v) =>
 
 const DigerTalepSchema = new mongoose.Schema(
   {
-    talep_tipi:       { type: String, set: toNullIfEmpty, default: null }, // "Evrak"
+    talep_tipi: { type: String, set: toNullIfEmpty, default: null }, // "Evrak"
     talep_tipi_diger: { type: String, set: toNullIfEmpty, default: null },
-    alt_tip:          { type: String, set: toNullIfEmpty, default: null }, // "Banka"
-    alt_tip_diger:    { type: String, set: toNullIfEmpty, default: null },
-    talep_aciklama:   { type: String, set: toNullIfEmpty, default: null },
-    nereden:          { type: String, set: toNullIfEmpty, default: null },
-    nereye:           { type: String, set: toNullIfEmpty, default: null },
-    transfer_tarih:   { type: String, set: toNullIfEmpty, default: null }, // "YYYY-MM-DD"
-    transfer_saat:    { type: String, set: toNullIfEmpty, default: null }, // "HH:mm"
-    type:             { type: String, default: "diger", index: true },
+    alt_tip: { type: String, set: toNullIfEmpty, default: null }, // "Banka"
+    alt_tip_diger: { type: String, set: toNullIfEmpty, default: null },
+    talep_aciklama: { type: String, set: toNullIfEmpty, default: null },
+    nereden: { type: String, set: toNullIfEmpty, default: null },
+    nereye: { type: String, set: toNullIfEmpty, default: null },
+    transfer_tarih: { type: String, set: toNullIfEmpty, default: null }, // "YYYY-MM-DD"
+    transfer_saat: { type: String, set: toNullIfEmpty, default: null }, // "HH:mm"
+    type: { type: String, default: "diger", index: true },
+    // Yeni alanlar
+    arac: { type: mongoose.Schema.Types.ObjectId, ref: "Plaka", default: null },
+    sofor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    atamaDurumu: { type: String, enum: ["Evet", "Hayır"], default: "Hayır" },
   },
   { timestamps: true }
 );

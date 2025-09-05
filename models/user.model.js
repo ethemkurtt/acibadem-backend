@@ -58,6 +58,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     ulke: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
+    musaitlik: { type: Boolean, default: true },
     telefon: { type: String, default: null },
     mail: { type: String, default: null },
     dogumTarihi: { type: Date, default: null },

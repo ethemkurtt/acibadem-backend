@@ -231,3 +231,15 @@ async function userResponse(user) {
     permissions: mergedPermissions
   };
 }
+const User = require("../models/user.model");
+
+exports.getSoforler = async (req, res) => {
+  try {
+    const soforler = await User.find({ roleGroupId: "sofor" })
+      .select("name telefon musaitlik lokasyon");
+
+    res.json(soforler);
+  } catch (err) {
+    res.status(500).json({ error: "Şoför listesi alınamadı." });
+  }
+};
