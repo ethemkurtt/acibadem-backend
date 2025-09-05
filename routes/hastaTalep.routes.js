@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const path = require("path");
-const auth = require("../middleware/auth");
+
 
 const hastaTalepController = require("../controllers/hastaTalep.controller");
 
@@ -33,22 +33,22 @@ router.post(
 );
 
 // ✅ 2. Tüm talepleri getir (admin view)
-router.get("/", auth, hastaTalepController.getAllHastaTalepleri);
+router.get("/", hastaTalepController.getAllHastaTalepleri);
 
 // ✅ 3. Lokasyona göre talepler
-router.get("/lokasyon", auth, hastaTalepController.getTaleplerByLokasyon);
+router.get("/lokasyon",  hastaTalepController.getTaleplerByLokasyon);
 
 // ✅ 4. Tek talep detayı
-router.get("/:id", auth, hastaTalepController.getHastaTalepById);
+router.get("/:id",  hastaTalepController.getHastaTalepById);
 
 // ✅ 5. Talep güncelle
-router.put("/:id", auth, hastaTalepController.updateHastaTalep);
+router.put("/:id",  hastaTalepController.updateHastaTalep);
 
 // ✅ 6. Talep sil
-router.delete("/:id", auth, hastaTalepController.deleteHastaTalep);
+router.delete("/:id", hastaTalepController.deleteHastaTalep);
 
 // ✅ 7. Şoför + araç atama
-router.put("/:id/atama", auth, hastaTalepController.assignAracSofor);
-router.get("/bekleyen", auth, hastaTalepController.getBekleyenTalepler);
+router.put("/:id/atama",  hastaTalepController.assignAracSofor);
+router.get("/bekleyen",  hastaTalepController.getBekleyenTalepler);
 
 module.exports = router;
