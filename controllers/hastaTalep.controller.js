@@ -265,8 +265,11 @@ exports.getBekleyenTalepler = async (req, res) => {
     }
 
     const list = await HastaTalep.find({
-      lokasyon: lokasyonId,          // şeman lokasyonId ise burayı değiştir
-      atamaDurumu: "Hayır",
+      lokasyon: lokasyonId,
+      $or: [
+        { atamaDurumu: "Hayır" },         // "Hayır" olanlar
+        { atamaDurumu: { $exists: false } } // hiç olmayanlar
+      ]
     })
       .populate("arac", "plaka marka tip")
       .populate("sofor", "name telefon")
@@ -277,3 +280,4 @@ exports.getBekleyenTalepler = async (req, res) => {
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
+
