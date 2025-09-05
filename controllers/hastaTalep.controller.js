@@ -256,31 +256,24 @@ exports.assignAracSofor = async (req, res) => {
     res.status(500).json({ error: "Atama yapılamadı", details: err.message });
   }
 };
+// controllers/hastaTalep.controller.js
 exports.getBekleyenTalepler = async (req, res) => {
   try {
-    const lokasyonId = req.user?.lokasyon; // token'dan geliyor olmalı
-
+    const lokasyonId = req.lokasyonId; // ✅ her zaman string ObjectId
     if (!lokasyonId) {
-      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik (token)." });
-    }
-    if (!mongoose.isValidObjectId(lokasyonId)) {
-      return res.status(400).json({ error: "Lokasyon ID geçersiz.", value: String(lokasyonId) });
+      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
-    // DİKKAT: Buradaki alan adı sizin HastaTalep şemanızdaki ile aynı olmalı.
-    // Şemanız 'lokasyon' ise aşağıdaki gibi, eğer 'lokasyonId' ise alan adını değiştirin.
-    const query = { lokasyon: lokasyonId, atamaDurumu: "Hayır" };
-    // Eğer şemanızda 'lokasyonId' kullanıyorsanız:
-    // const query = { lokasyonId, atamaDurumu: "Hayır" };
-
-    const bekleyenTalepler = await HastaTalep.find(query)
+    const list = await HastaTalep.find({
+      lokasyon: lokasyonId,          // şeman lokasyonId ise burayı değiştir
+      atamaDurumu: "Hayır",
+    })
       .populate("arac", "plaka marka tip")
       .populate("sofor", "name telefon")
-      .populate("lokasyon", "ad"); // Şemanız 'lokasyonId' ise burayı kaldırın ya da 'lokasyonId' populate etmeyin.
+      .populate("lokasyon", "ad");
 
-    return res.json(bekleyenTalepler);
+    return res.json(list);
   } catch (err) {
-    console.error("getBekleyenTalepler error:", err);
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
