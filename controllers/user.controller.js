@@ -231,7 +231,7 @@ async function userResponse(user) {
     permissions: mergedPermissions
   };
 }
-const User = require("../models/user.model");
+
 
 exports.getSoforler = async (req, res) => {
   try {
