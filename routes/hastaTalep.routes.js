@@ -24,11 +24,11 @@ router.post(
   upload.fields([{ name: "documents", maxCount: 10 }]),
   hastaTalepController.createHastaTalep
 );
-
+router.get("/bekleyen", hastaTalepController.getBekleyenTalepler);
 router.get("/", hastaTalepController.getAllHastaTalepleri);
 router.get("/:id", hastaTalepController.getHastaTalepById);
 router.delete("/:id", hastaTalepController.deleteHastaTalep);
 router.put("/:id", hastaTalepController.updateHastaTalep);
 router.put("/:id/atama", hastaTalepController.assignAracSofor);
-router.get("/bekleyen", hastaTalepController.getBekleyenTalepler);
+
 module.exports = router;
