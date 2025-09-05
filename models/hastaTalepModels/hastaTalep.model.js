@@ -32,7 +32,11 @@ const HastaTalepSchema = new mongoose.Schema({
   bagajSayisi: { type: Number, default: 0 },
 
   aciklama: { type: String },
-  talepDurumu: { type: String, enum: ["Bekliyor", "Onaylandı", "İptal"], default: "Bekliyor" }
+  talepDurumu: { type: String, enum: ["Bekliyor", "Onaylandı", "İptal"], default: "Bekliyor" },
+
+  // ✅ Talebi oluşturan kişi bilgileri
+  talepEdenId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  talepEdenAdSoyad: { type: String, required: true }
 
 }, { timestamps: true });
 
