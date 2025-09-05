@@ -264,16 +264,35 @@ exports.getBekleyenTalepler = async (req, res) => {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
-    const list = await HastaTalep.find({
+    const filter = {
       lokasyon: lokasyonId,
       $or: [
-        { atamaDurumu: "Hayır" },         // "Hayır" olanlar
-        { atamaDurumu: { $exists: false } } // hiç olmayanlar
+        { atamaDurumu: "Hayır" },
+        { atamaDurumu: { $exists: false } }
       ]
-    })
-      .populate("arac", "plaka marka tip")
-      .populate("sofor", "name telefon")
-      .populate("lokasyon", "ad");
+    };
+
+    // 1) Doğrudan referanslar: hepsini tam populate et (alan kısıtlaması yok)
+    // 2) Routes içindeki olası alt referanslar için örnek deep-populate (opsiyonel bölüm aşağıda)
+    const list = await HastaTalep.find(filter)
+      .populate([
+        { path: "arac" },
+        { path: "sofor" },
+        { path: "lokasyon" },
+        { path: "companions" },
+        { 
+          path: "routes",
+          // Eğer Routes şemanız içinde başka ref alanlar varsa, şurayı aktif edin:
+          // populate: [
+          //   { path: "pickup.locationId", options: { strictPopulate: false } },
+          //   { path: "drop.locationId",   options: { strictPopulate: false } }
+          // ]
+        },
+        { path: "notificationPerson" }
+      ])
+      // Plain object istiyorsanız (JSON’a doğrudan dökmek için faydalı):
+      // .lean({ virtuals: true })
+      ;
 
     return res.json(list);
   } catch (err) {
