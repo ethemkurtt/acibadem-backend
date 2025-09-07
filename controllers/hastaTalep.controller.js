@@ -64,20 +64,39 @@ const createRouteRecord = async (hastaId, routeData) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ POST - Yeni Talep Oluştur
-//  - talepEden bilgilerini set eder
-//  - transferTarihi/transferTipi yoksa routes'tan türetir
-//  - alt koleksiyonları oluşturup HastaTalep ile bağlar
+/**
+ * ✅ POST - Yeni Talep Oluştur
+ *  - talepEden bilgilerini ÖNCE BODY’den alır (fallback: header → req.user)
+ *  - transferTarihi/transferTipi yoksa routes'tan türetir
+ *  - alt koleksiyonları oluşturup HastaTalep ile bağlar
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 exports.createHastaTalep = async (req, res) => {
   try {
-    const { companions = [], routes = [], notificationPerson, ...talepData } = req.body;
+    const { companions = [], routes = [], notificationPerson, talepEdenId: bodyUserId, talepEdenAdSoyad: bodyUserName, ...talepData } = req.body;
 
-    // 1) Talebi oluşturan kullanıcı bilgileri (auth middleware’inize göre düzenleyin)
-    const talepEdenId = req.user?._id || req.userId;
-    const talepEdenAdSoyad = req.user?.fullName || req.user?.name || req.headers["x-user-name"];
+    // 1) Talebi oluşturan kullanıcı bilgileri (ÖNCE BODY → header → req.user)
+    const headerUserId   = req.get?.("x-user-id");
+    const headerUserName = req.get?.("x-user-name");
+
+    let talepEdenId = (typeof bodyUserId !== "undefined" ? bodyUserId : null)
+                   || headerUserId
+                   || (req.user && (req.user._id || req.user.id))
+                   || req.userId;
+
+    let talepEdenAdSoyad = (typeof bodyUserName !== "undefined" ? bodyUserName : null)
+                        || headerUserName
+                        || (req.user && (req.user.fullName || req.user.name));
+
+    if (typeof talepEdenId === "string") talepEdenId = talepEdenId.trim();
+    if (typeof talepEdenAdSoyad === "string") talepEdenAdSoyad = talepEdenAdSoyad.trim();
+
     if (!talepEdenId || !talepEdenAdSoyad) {
       return res.status(400).json({ error: "Talebi oluşturan kullanıcı bilgisi eksik (talepEdenId / talepEdenAdSoyad)." });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(talepEdenId)) {
+      return res.status(400).json({ error: "talepEdenId geçerli bir ObjectId değil." });
     }
 
     // 2) transferTarihi & transferTipi türet (şema required)
@@ -343,9 +362,15 @@ exports.getBekleyenTalepler = async (req, res) => {
     };
 
     const list = await HastaTalep.find(filter)
-      .populate([{ path: "arac" }, { path: "sofor" }, { path: "lokasyon" },
-                 { path: "companions" }, { path: "routes" }, { path: "notificationPerson" },
-                 { path: "talepEdenId" }]);
+      .populate([
+        { path: "arac" },
+        { path: "sofor" },
+        { path: "lokasyon" },
+        { path: "companions" },
+        { path: "routes" },
+        { path: "notificationPerson" },
+        { path: "talepEdenId" }
+      ]);
 
     return res.json(list);
   } catch (err) {
