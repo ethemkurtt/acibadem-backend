@@ -35,8 +35,8 @@ router.get('/sofor/:id/atamalar', authRequired, hastaTalepController.getSoforAta
 router.delete("/:id", hastaTalepController.deleteHastaTalep);
 router.put("/:id", hastaTalepController.updateHastaTalep);
 router.put("/:id/atama", hastaTalepController.assignAracSofor);
-router.put('/hasta-talep/:id/baslat',  hastaTalepController.baslatTalep);
-router.put('/hasta-talep/:id/tamamla', hastaTalepController.tamamlaTalep);
-router.put('/hasta-talep/:id/iptal',   hastaTalepController.iptalTalep);
+router.put('/:id/baslat',  hastaTalepController.baslatTalep);
+router.put('/:id/tamamla', hastaTalepController.tamamlaTalep);
+router.put('/:id/iptal',   hastaTalepController.iptalTalep);
 
 module.exports = router;

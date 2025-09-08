@@ -479,23 +479,25 @@ exports.getSoforAtamalariById = async (req, res) => {
   }
 };
 
+const HastaTalep = require('../models/hastaTalepModels/hastaTalep.model');
+
+// PUT /api/hasta-talep/:id/baslat
 exports.baslatTalep = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = req.user || {}; // auth middleware’den
-    const talep = await findAndAuthorizeTalep(id, user);
 
-    // iş zaten tamamlandıysa tekrar başlatmayalım
+    const talep = await HastaTalep.findById(id);
+    if (!talep) return res.status(404).json({ error: 'Talep bulunamadı.' });
+
     if (talep.isDurumu === 'Tamamlandı') {
       return res.status(400).json({ error: 'Tamamlanmış iş yeniden başlatılamaz.' });
     }
 
     talep.isDurumu = 'Başladı';
-    // istersen zaman damgası tut:
-    talep.isBaslamaZamani = new Date(); // şemanda yoksa otomatik ekler (strict false değilse şemaya eklemeyi düşün)
+    talep.isBaslamaZamani = new Date();
     await talep.save();
 
-    const populated = await HastaTalep.findById(talep._id)
+    const populated = await HastaTalep.findById(id)
       .populate('companions')
       .populate('routes')
       .populate('notificationPerson')
@@ -504,10 +506,9 @@ exports.baslatTalep = async (req, res) => {
       .populate('lokasyon')
       .populate('talepEdenId');
 
-    return res.json({ message: 'İş başlatıldı.', talep: populated });
+    res.json({ message: 'İş başlatıldı.', talep: populated });
   } catch (err) {
-    const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || 'Başlatma hatası' });
+    res.status(500).json({ error: err.message || 'Başlatma hatası' });
   }
 };
 
@@ -515,8 +516,9 @@ exports.baslatTalep = async (req, res) => {
 exports.tamamlaTalep = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = req.user || {};
-    const talep = await findAndAuthorizeTalep(id, user);
+
+    const talep = await HastaTalep.findById(id);
+    if (!talep) return res.status(404).json({ error: 'Talep bulunamadı.' });
 
     if (talep.isDurumu !== 'Başladı') {
       return res.status(400).json({ error: 'İş tamamlanmadan önce başlatılmalıdır.' });
@@ -526,7 +528,7 @@ exports.tamamlaTalep = async (req, res) => {
     talep.isBitisZamani = new Date();
     await talep.save();
 
-    const populated = await HastaTalep.findById(talep._id)
+    const populated = await HastaTalep.findById(id)
       .populate('companions')
       .populate('routes')
       .populate('notificationPerson')
@@ -535,10 +537,9 @@ exports.tamamlaTalep = async (req, res) => {
       .populate('lokasyon')
       .populate('talepEdenId');
 
-    return res.json({ message: 'İş tamamlandı.', talep: populated });
+    res.json({ message: 'İş tamamlandı.', talep: populated });
   } catch (err) {
-    const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || 'Tamamlama hatası' });
+    res.status(500).json({ error: err.message || 'Tamamlama hatası' });
   }
 };
 
@@ -546,21 +547,20 @@ exports.tamamlaTalep = async (req, res) => {
 exports.iptalTalep = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = req.user || {};
-    const talep = await findAndAuthorizeTalep(id, user);
+
+    const talep = await HastaTalep.findById(id);
+    if (!talep) return res.status(404).json({ error: 'Talep bulunamadı.' });
 
     if (talep.isDurumu === 'Tamamlandı') {
       return res.status(400).json({ error: 'Tamamlanmış iş iptal edilemez.' });
     }
 
-    // iş akışı: iptal edilen işte genelde isDurumu’nu dokunmadan bırakabiliriz
-    // ama istersen “Bekliyor”a çekebilirsin. Aşağıyı ihtiyacına göre ayarla.
     talep.talepDurumu = 'İptal';
     talep.iptalZamani = new Date();
-    talep.iptalNedeni = req.body?.neden || talep.iptalNedeni; // istersen neden al
+    talep.iptalNedeni = req.body?.neden || null;
     await talep.save();
 
-    const populated = await HastaTalep.findById(talep._id)
+    const populated = await HastaTalep.findById(id)
       .populate('companions')
       .populate('routes')
       .populate('notificationPerson')
@@ -569,9 +569,8 @@ exports.iptalTalep = async (req, res) => {
       .populate('lokasyon')
       .populate('talepEdenId');
 
-    return res.json({ message: 'İş iptal edildi.', talep: populated });
+    res.json({ message: 'İş iptal edildi.', talep: populated });
   } catch (err) {
-    const code = err.statusCode || 500;
-    return res.status(code).json({ error: err.message || 'İptal hatası' });
+    res.status(500).json({ error: err.message || 'İptal hatası' });
   }
 };
