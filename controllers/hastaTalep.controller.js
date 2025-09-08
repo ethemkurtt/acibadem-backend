@@ -377,3 +377,32 @@ exports.getBekleyenTalepler = async (req, res) => {
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
+
+exports.getOnaylanmisTalepler = async (req, res) => {
+  try {
+    const lokasyonId = req.lokasyonId; // middleware’de set edilmiş olmalı
+    if (!lokasyonId) {
+      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+    }
+
+    const filter = {
+      lokasyon: lokasyonId,
+      $or: [{ atamaDurumu: "Evet" }, { atamaDurumu: { $exists: true } }],
+    };
+
+    const list = await HastaTalep.find(filter)
+      .populate([
+        { path: "arac" },
+        { path: "sofor" },
+        { path: "lokasyon" },
+        { path: "companions" },
+        { path: "routes" },
+        { path: "notificationPerson" },
+        { path: "talepEdenId" }
+      ]);
+
+    return res.json(list);
+  } catch (err) {
+    return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
+  }
+};

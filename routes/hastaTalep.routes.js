@@ -27,6 +27,7 @@ router.post(
   hastaTalepController.createHastaTalep
 );
 router.get("/bekleyen",authRequired, hastaTalepController.getBekleyenTalepler);
+router.get("/onaylanmis",authRequired, hastaTalepController.getOnaylanmisTalepler);
 router.get("/", hastaTalepController.getAllHastaTalepleri);
 router.get("/:id", hastaTalepController.getHastaTalepById);
 router.delete("/:id", hastaTalepController.deleteHastaTalep);
