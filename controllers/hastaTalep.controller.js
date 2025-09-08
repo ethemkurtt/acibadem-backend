@@ -478,3 +478,100 @@ exports.getSoforAtamalariById = async (req, res) => {
     res.status(500).json({ error: 'Atamalar alınamadı.', details: e.message });
   }
 };
+
+exports.baslatTalep = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || {}; // auth middleware’den
+    const talep = await findAndAuthorizeTalep(id, user);
+
+    // iş zaten tamamlandıysa tekrar başlatmayalım
+    if (talep.isDurumu === 'Tamamlandı') {
+      return res.status(400).json({ error: 'Tamamlanmış iş yeniden başlatılamaz.' });
+    }
+
+    talep.isDurumu = 'Başladı';
+    // istersen zaman damgası tut:
+    talep.isBaslamaZamani = new Date(); // şemanda yoksa otomatik ekler (strict false değilse şemaya eklemeyi düşün)
+    await talep.save();
+
+    const populated = await HastaTalep.findById(talep._id)
+      .populate('companions')
+      .populate('routes')
+      .populate('notificationPerson')
+      .populate('arac')
+      .populate('sofor')
+      .populate('lokasyon')
+      .populate('talepEdenId');
+
+    return res.json({ message: 'İş başlatıldı.', talep: populated });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    return res.status(code).json({ error: err.message || 'Başlatma hatası' });
+  }
+};
+
+// PUT /api/hasta-talep/:id/tamamla
+exports.tamamlaTalep = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || {};
+    const talep = await findAndAuthorizeTalep(id, user);
+
+    if (talep.isDurumu !== 'Başladı') {
+      return res.status(400).json({ error: 'İş tamamlanmadan önce başlatılmalıdır.' });
+    }
+
+    talep.isDurumu = 'Tamamlandı';
+    talep.isBitisZamani = new Date();
+    await talep.save();
+
+    const populated = await HastaTalep.findById(talep._id)
+      .populate('companions')
+      .populate('routes')
+      .populate('notificationPerson')
+      .populate('arac')
+      .populate('sofor')
+      .populate('lokasyon')
+      .populate('talepEdenId');
+
+    return res.json({ message: 'İş tamamlandı.', talep: populated });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    return res.status(code).json({ error: err.message || 'Tamamlama hatası' });
+  }
+};
+
+// PUT /api/hasta-talep/:id/iptal
+exports.iptalTalep = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || {};
+    const talep = await findAndAuthorizeTalep(id, user);
+
+    if (talep.isDurumu === 'Tamamlandı') {
+      return res.status(400).json({ error: 'Tamamlanmış iş iptal edilemez.' });
+    }
+
+    // iş akışı: iptal edilen işte genelde isDurumu’nu dokunmadan bırakabiliriz
+    // ama istersen “Bekliyor”a çekebilirsin. Aşağıyı ihtiyacına göre ayarla.
+    talep.talepDurumu = 'İptal';
+    talep.iptalZamani = new Date();
+    talep.iptalNedeni = req.body?.neden || talep.iptalNedeni; // istersen neden al
+    await talep.save();
+
+    const populated = await HastaTalep.findById(talep._id)
+      .populate('companions')
+      .populate('routes')
+      .populate('notificationPerson')
+      .populate('arac')
+      .populate('sofor')
+      .populate('lokasyon')
+      .populate('talepEdenId');
+
+    return res.json({ message: 'İş iptal edildi.', talep: populated });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    return res.status(code).json({ error: err.message || 'İptal hatası' });
+  }
+};
