@@ -332,9 +332,18 @@ exports.assignAracSofor = async (req, res) => {
     const { soforId, aracId } = req.body;
     const { id } = req.params;
 
+    const atamaYapanId = req.user?._id || req.userId;
+    const atamaYapanAdSoyad = req.user?.fullName || req.user?.name;
+
     const updatedTalep = await HastaTalep.findByIdAndUpdate(
       id,
-      { sofor: soforId, arac: aracId, atamaDurumu: "Evet" },
+      {
+        sofor: soforId,
+        arac: aracId,
+        atamaDurumu: "Evet",
+        atamaYapanId,
+        atamaYapanAdSoyad
+      },
       { new: true }
     )
       .populate("arac", "plaka marka tip")

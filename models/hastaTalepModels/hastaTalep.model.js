@@ -36,7 +36,18 @@ const HastaTalepSchema = new mongoose.Schema({
 
   // ✅ Talebi oluşturan kişi bilgileri
   talepEdenId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  talepEdenAdSoyad: { type: String, required: true }
+  talepEdenAdSoyad: { type: String, required: true },
+
+  // ✅ Şoför iş akışı
+  isDurumu: { 
+    type: String, 
+    enum: ["Bekliyor", "Başladı", "Tamamlandı"], 
+    default: "Bekliyor" 
+  },
+
+  // ✅ Atamayı yapan kişi bilgileri
+  atamaYapanId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  atamaYapanAdSoyad: { type: String, default: null }
 
 }, { timestamps: true });
 
