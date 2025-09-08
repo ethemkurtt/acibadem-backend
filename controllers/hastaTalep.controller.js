@@ -479,7 +479,6 @@ exports.getSoforAtamalariById = async (req, res) => {
   }
 };
 
-const HastaTalep = require('../models/hastaTalepModels/hastaTalep.model');
 
 // PUT /api/hasta-talep/:id/baslat
 exports.baslatTalep = async (req, res) => {
