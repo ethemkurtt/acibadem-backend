@@ -30,6 +30,8 @@ router.get("/bekleyen",authRequired, hastaTalepController.getBekleyenTalepler);
 router.get("/onaylanmis",authRequired, hastaTalepController.getOnaylanmisTalepler);
 router.get("/", hastaTalepController.getAllHastaTalepleri);
 router.get("/:id", hastaTalepController.getHastaTalepById);
+router.get('/sofor/atamalarim', authRequired, hastaTalepController.getSoforAtamalarim);
+router.get('/sofor/:id/atamalar', authRequired, hastaTalepController.getSoforAtamalariById);
 router.delete("/:id", hastaTalepController.deleteHastaTalep);
 router.put("/:id", hastaTalepController.updateHastaTalep);
 router.put("/:id/atama", hastaTalepController.assignAracSofor);

@@ -406,3 +406,66 @@ exports.getOnaylanmisTalepler = async (req, res) => {
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
+
+exports.getSoforAtamalarim = async (req, res) => {
+  try {
+    const soforId = req.user?._id || req.userId;
+    if (!soforId) return res.status(401).json({ error: 'Şoför kimliği bulunamadı.' });
+
+    // Filtreler (opsiyonel query: status, dateFrom, dateTo)
+    const { status, dateFrom, dateTo } = req.query;
+
+    const filter = {
+      sofor: soforId,
+      atamaDurumu: 'Evet'
+    };
+
+    if (status) filter.talepDurumu = status; // Bekliyor | Onaylandı | İptal (şeman)
+    if (dateFrom || dateTo) {
+      filter.transferTarihi = {};
+      if (dateFrom) filter.transferTarihi.$gte = new Date(dateFrom);
+      if (dateTo)   filter.transferTarihi.$lte = new Date(dateTo);
+    }
+
+    const list = await HastaTalep.find(filter)
+      .populate('arac')                 // plaka, marka, tip
+      .populate('sofor', 'name telefon')
+      .populate('lokasyon', 'ad')
+      .populate('companions')
+      .populate('routes')
+      .populate('notificationPerson')
+      .sort({ transferTarihi: 1 });
+
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Atamalar alınamadı.', details: e.message });
+  }
+};
+
+exports.getSoforAtamalariById = async (req, res) => {
+  try {
+    const soforId = req.params.id;
+    const { status, dateFrom, dateTo } = req.query;
+
+    const filter = { sofor: soforId, atamaDurumu: 'Evet' };
+    if (status) filter.talepDurumu = status;
+    if (dateFrom || dateTo) {
+      filter.transferTarihi = {};
+      if (dateFrom) filter.transferTarihi.$gte = new Date(dateFrom);
+      if (dateTo)   filter.transferTarihi.$lte = new Date(dateTo);
+    }
+
+    const list = await HastaTalep.find(filter)
+      .populate('arac')
+      .populate('sofor', 'name telefon')
+      .populate('lokasyon', 'ad')
+      .populate('companions')
+      .populate('routes')
+      .populate('notificationPerson')
+      .sort({ transferTarihi: 1 });
+
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: 'Atamalar alınamadı.', details: e.message });
+  }
+};
