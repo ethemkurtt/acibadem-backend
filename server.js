@@ -19,7 +19,6 @@ app.use(morgan("dev"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // 🔗 Route'lar
-app.use("/api", require("./routes")); // ✅ Tüm route'ları index.js üzerinden yönlendiriyoruz
 
 // Diğer tekil route dosyaları (gerekliyse)
 app.use("/api/otel", require("./routes/otel.routes"));
