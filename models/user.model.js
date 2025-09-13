@@ -6,19 +6,12 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
 
-    // ✅ Düz metin: Organizasyon
-    organizasyon: { type: String, required: true }, // Örn: "Destek Hizmetleri"
+    organizasyon: { type: String, required: true },
+    personelGrubu: { type: String, required: true },
+    roleGroupId: { type: String, required: true },
 
-    // ✅ Düz metin: Personel Grubu
-    personelGrubu: { type: String, required: true }, // Örn: "Eleman"
+    perms: { type: [String], default: [] },
 
-    // ✅ roleGroupId → string olarak eşleşecek (RoleGroup.roleId)
-    roleGroupId: { type: String, required: true }, // Örn: "sofor"
-
-    // ✅ Kişiye özel kısa izinler
-    perms: { type: [String], default: [] }, // Örn: ["talepOlustur:personel"]
-
-    // ✅ Kişiye özel sayfa-aksiyon izinleri
     permissions: {
       type: Map,
       of: {
@@ -39,7 +32,6 @@ const userSchema = new mongoose.Schema(
       default: {},
     },
 
-    // 🔹 Diğer metadata alanları (opsiyonel)
     locations: { type: [String], default: [] },
     tc: { type: String, default: null },
     departman: {
@@ -47,11 +39,12 @@ const userSchema = new mongoose.Schema(
       ref: "Departman",
       default: null,
     },
-    lokasyon: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Lokasyon",
-      default: null,
-    },
+    lokasyonlar: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Lokasyon",
+      },
+    ],
     bolge: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Bolge",
@@ -74,7 +67,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Map'i JSON'da düz objeye çevir
 if (!userSchema.options.toJSON) userSchema.options.toJSON = {};
 userSchema.options.toJSON.transform = function (doc, ret) {
   if (ret.permissions instanceof Map) {

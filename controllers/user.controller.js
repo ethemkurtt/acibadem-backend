@@ -14,7 +14,7 @@ exports.createUser = async (req, res) => {
       roleGroupId,
       tc,
       departman,
-      lokasyon,
+      lokasyonlar,
       bolge,
       ulke,
       telefon,
@@ -26,7 +26,6 @@ exports.createUser = async (req, res) => {
       perms
     } = req.body;
 
-    // Zorunlu alan kontrolü
     if (!name || !email || !password || !personelGrubu || !roleGroupId || !organizasyon) {
       return res.status(400).json({
         error: "Ad, email, şifre, personelGrubu, roleGroupId ve organizasyon zorunludur."
@@ -51,7 +50,7 @@ exports.createUser = async (req, res) => {
       roleGroupId,
       tc: tc || null,
       departman: departman || null,
-      lokasyon: lokasyon || null,
+      lokasyonlar: Array.isArray(lokasyonlar) ? lokasyonlar : [],
       bolge: bolge || null,
       ulke: ulke || null,
       telefon: telefon || null,
@@ -59,15 +58,15 @@ exports.createUser = async (req, res) => {
       dogumTarihi: dogumTarihi || null,
       cinsiyet: cinsiyet || null,
       ehliyet: ehliyet ?? false,
-      permissions: permissions || {}, // sadece kişisel yetkiler
-      perms: perms || []              // sadece kişisel yetkiler
+      permissions: permissions || {},
+      perms: perms || []
     });
 
     await newUser.save();
 
     const populatedUser = await User.findById(newUser._id)
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
@@ -87,7 +86,7 @@ exports.getAllUsers = async (req, res) => {
     const users = await User.find()
       .sort({ name: 1 })
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
@@ -104,7 +103,7 @@ exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
@@ -132,12 +131,16 @@ exports.updateUser = async (req, res) => {
       delete updateData.password;
     }
 
+    if (updateData.lokasyonlar && !Array.isArray(updateData.lokasyonlar)) {
+      return res.status(400).json({ error: "lokasyonlar bir dizi olmalı." });
+    }
+
     const updated = await User.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true
     })
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
@@ -165,11 +168,10 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// ✅ Kullanıcı + RoleGroup yetkilerini birleştir ve düz response hazırla
+// ✅ Kullanıcı + RoleGroup yetkilerini birleştir
 async function userResponse(user) {
   const group = await RoleGroup.findOne({ roleId: user.roleGroupId });
 
-  // RoleGroup yetkileri
   let groupPermissions = {};
   const groupPerms = Array.isArray(group?.yetkiler?.perms) ? group.yetkiler.perms : [];
 
@@ -181,7 +183,6 @@ async function userResponse(user) {
     }
   }
 
-  // User izinleri
   const userPerms = Array.isArray(user.perms) ? user.perms : [];
 
   let userPermissions = {};
@@ -193,10 +194,8 @@ async function userResponse(user) {
     }
   }
 
-  // 🔀 perms birleştir
   const mergedPerms = Array.from(new Set([...groupPerms, ...userPerms]));
 
-  // 🔀 permissions birleştir
   const mergedPermissions = { ...groupPermissions };
   for (const [page, actions] of Object.entries(userPermissions)) {
     mergedPermissions[page] = actions;
@@ -220,8 +219,8 @@ async function userResponse(user) {
 
     departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
-    lokasyon: user.lokasyon?._id || null,
-    lokasyonName: user.lokasyon?.ad || null,
+    lokasyonlar: user.lokasyonlar?.map(l => l._id) || [],
+    lokasyonlarNames: user.lokasyonlar?.map(l => l.ad) || [],
     bolge: user.bolge?._id || null,
     bolgeName: user.bolge?.ad || null,
     ulke: user.ulke?._id || null,
@@ -232,11 +231,12 @@ async function userResponse(user) {
   };
 }
 
-
+// ✅ Şoförleri getir
 exports.getSoforler = async (req, res) => {
   try {
     const soforler = await User.find({ roleGroupId: "sofor" })
-      .select("name telefon musaitlik lokasyon");
+      .select("name telefon musaitlik lokasyonlar")
+      .populate("lokasyonlar", "ad");
 
     res.json(soforler);
   } catch (err) {
