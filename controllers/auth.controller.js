@@ -173,7 +173,7 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ email })
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
