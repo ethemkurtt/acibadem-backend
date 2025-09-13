@@ -28,6 +28,7 @@ router.post(
 );
 router.get("/bekleyen",authRequired, hastaTalepController.getBekleyenTalepler);
 router.get("/onaylanmis",authRequired, hastaTalepController.getOnaylanmisTalepler);
+router.get("/taleplerim",authRequired, hastaTalepController.getMyTalepler);
 router.get("/", hastaTalepController.getAllHastaTalepleri);
 router.get("/:id", hastaTalepController.getHastaTalepById);
 router.get('/sofor/atamalarim', authRequired, hastaTalepController.getSoforAtamalarim);

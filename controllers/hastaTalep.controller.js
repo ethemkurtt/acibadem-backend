@@ -279,16 +279,36 @@ exports.deleteHastaTalep = async (req, res) => {
 exports.getTaleplerByLokasyon = async (req, res) => {
   try {
     const user = req.user || {};
-    const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
-    const tekilLokasyon = user.lokasyon || null;
 
-    if (!userLokasyonlar.length && !tekilLokasyon) {
+    // 1) Kaynaktan ham değerleri topla (çoklu + tekil)
+    const rawList = [
+      ...(Array.isArray(user.lokasyonlar) ? user.lokasyonlar : []),
+      ...(user.lokasyon ? [user.lokasyon] : [])
+    ];
+
+    // 2) Temizle, uniq yap, ObjectId'e çevir
+    const lokasyonIds = Array.from(
+      new Set(
+        rawList
+          .filter(Boolean)
+          .map(v => {
+            // v zaten ObjectId ise stringe çevirip uniq için normalize et
+            if (v && typeof v === "object" && v._id) return String(v._id);
+            return String(v);
+          })
+      )
+    )
+      .filter(id => Types.ObjectId.isValid(id))
+      .map(id => new Types.ObjectId(id));
+
+    if (!lokasyonIds.length) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
-    const lokasyonFilter = userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon;
+    // 3) Çoklu lokasyon filtresi
+    const filter = { lokasyon: { $in: lokasyonIds } };
 
-    const talepler = await HastaTalep.find({ lokasyon: lokasyonFilter })
+    const talepler = await HastaTalep.find(filter)
       .populate("companions")
       .populate("routes")
       .populate("notificationPerson")
@@ -618,5 +638,28 @@ exports.updateLokasyon = async (req, res) => {
     return res.json({ message: "Lokasyon güncellendi.", talep: populated });
   } catch (err) {
     return res.status(500).json({ error: "Lokasyon güncellenemedi.", details: err.message });
+  }
+};
+exports.getMyTalepler = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.userId;
+
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      return res.status(401).json({ error: "Geçerli bir kullanıcı kimliği bulunamadı." });
+    }
+
+    const talepler = await HastaTalep.find({ talepEdenId: userId })
+      .populate("companions")
+      .populate("routes")
+      .populate("notificationPerson")
+      .populate("arac", "plaka marka tip")
+      .populate("sofor", "name telefon")
+      .populate("lokasyon", "ad")
+      .populate("talepEdenId")
+      .sort({ createdAt: -1 }); // en yeni önce gelsin
+
+    res.json(talepler);
+  } catch (err) {
+    res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
