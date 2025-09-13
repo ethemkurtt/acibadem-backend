@@ -92,6 +92,9 @@ exports.createLokasyon = async (req, res) => {
     const yeniLokasyon = await Lokasyon.create({ ad: ad.trim() });
     res.status(201).json(yeniLokasyon);
   } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: "Bu lokasyon zaten kayıtlı." });
+    }
     res.status(500).json({ message: "Lokasyon eklenemedi", error: err.message });
   }
 };

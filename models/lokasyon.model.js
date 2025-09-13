@@ -1,16 +1,16 @@
-// models/Lokasyon.js
 const mongoose = require("mongoose");
 
 const lokasyonSchema = new mongoose.Schema({
-  ad: { type: String, required: true, unique: true },
+  ad: { type: String, required: true, unique: true, trim: true },
 
-  // Şehir bilgileri
-  sehirId:   { type: Number, required: true, min: 1, index: true }, // örn: 34
-  sehirName: { type: String, required: true, trim: true }           // örn: "İstanbul"
+  // Şehir bilgileri (opsiyonel)
+  sehirId:   { type: Number, min: 1, index: true, default: null },
+  sehirName: { type: String, trim: true, default: "" }
 }, { timestamps: true });
 
 // (Opsiyonel) Sehir koleksiyonundan otomatik doldurma
 lokasyonSchema.pre("save", async function(next) {
+  // sehirId verildiyse ve sehirName boşsa doldur
   if (this.isModified("sehirId") && this.sehirId && !this.sehirName) {
     try {
       const Sehir = mongoose.model("Sehir");
