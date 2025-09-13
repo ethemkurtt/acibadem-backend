@@ -164,38 +164,92 @@ function userResponse(user, access, perms, mergedPermissions) {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body.email || "").toLowerCase().trim();
+    const password = String(req.body.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "E-posta ve şifre zorunludur." });
+    }
+
     const user = await User.findOne({ email })
       .select("+password")
       .populate("departman", "ad")
       .populate("lokasyonlar", "ad")
-      .populate("lokasyon", "ad"); // 🔑 legacy populate
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
 
-    if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ error: "Hatalı şifre." });
+    if (!user) {
+      return res.status(401).json({ error: "Kullanıcı bulunamadı." });
+    }
 
-    const lokDocs = (user.lokasyonlar && user.lokasyonlar.length) ? user.lokasyonlar : (user.lokasyon ? [user.lokasyon] : []);
+    const isMatch = await bcrypt.compare(password, user.password || "");
+    if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
-    const token = jwt.sign({ id: user._id, email: user.email, roleGroupId: user.roleGroupId }, process.env.JWT_SECRET, { expiresIn: "12h" });
+    // Tüm yetkileri hesapla (role + roleGroup + user)
+    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
+    const finalAccess = await computeAccess(user, roleDoc);
+
+    const lokDocs = (user.lokasyonlar && user.lokasyonlar.length)
+      ? user.lokasyonlar
+      : (user.lokasyon ? [user.lokasyon] : []);
+
+    // JWT'ye gerekli tüm context bilgilerini koy
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+        access: finalAccess,
+        roles: user.roles || [],
+        perms: finalPerms,
+        permissions: mergedPermissions,
+        lokasyon: user.lokasyon?._id || user.lokasyon || null,
+        roleGroupId: user.roleGroupId || null,
+      },
+      getJwtSecret(),
+      { expiresIn: "7d" }
+    );
 
     res.json({
+      message: "Giriş başarılı.",
       token,
+      role: user.role,
+      access: finalAccess,
+      perms: finalPerms,
+      roles: user.roles || [],
+      permissions: mergedPermissions,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role || null,
+        roleGroupId: user.roleGroupId || null,
+        tc: user.tc,
+        telefon: user.telefon,
+        mail: user.mail,
+        dogumTarihi: user.dogumTarihi,
+        cinsiyet: user.cinsiyet,
+        ehliyet: user.ehliyet,
+
         departman: user.departman?._id || null,
         departmanName: user.departman?.ad || null,
+        bolge: user.bolge?._id || null,
+        bolgeName: user.bolge?.ad || null,
+        ulke: user.ulke?._id || null,
+        ulkeName: user.ulke?.ad || null,
+
+        lokasyon: user.lokasyon?._id || user.lokasyon || null,
+        lokasyonName: user.lokasyon?.ad || null,
         lokasyonlar: lokDocs.map(l => l?._id ?? l).filter(Boolean),
         lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
       }
     });
-  } catch (e) {
-    console.error("login error:", e);
-    res.status(500).json({ error: "Sunucu hatası" });
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 exports.getMe = async (req, res) => {
