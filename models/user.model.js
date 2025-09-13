@@ -32,14 +32,17 @@ const userSchema = new mongoose.Schema(
       default: {},
     },
 
-    // ekstra string lokasyon etiketleri (opsiyonel)
+    // (opsiyonel) ekstra string lokasyon etiketleri
     locations: { type: [String], default: [] },
 
     tc: { type: String, default: null },
     departman: { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
 
-    // 🔹 Çoklu lokasyon desteği
+    // ✅ YENİ: Çoklu lokasyon
     lokasyonlar: [{ type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon" }],
+
+    // ✅ LEGACY: Eski tekil alan. Geriye dönük uyumluluk için tuttuk.
+    lokasyon: { type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon", default: null },
 
     bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
     ulke: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
