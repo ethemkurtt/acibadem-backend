@@ -642,24 +642,20 @@ exports.updateLokasyon = async (req, res) => {
 };
 exports.getMyTalepler = async (req, res) => {
   try {
-    // 1) Kullanıcı kimliği tüm olasılıklardan toplanır
     let userId =
       (req.user && (req.user._id || req.user.id)) ||
       req.userId ||
-      req.get?.("x-user-id");
+      (req.get && req.get("x-user-id"));
 
-    if (typeof userId === "object" && userId?._id) userId = String(userId._id);
+    if (userId && typeof userId === "object" && userId._id) userId = String(userId._id);
     if (typeof userId === "number") userId = String(userId);
 
-    // 2) Validasyon — burada patlamasını engelliyoruz
-    if (!userId || !Types.ObjectId.isValid(userId)) {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(401).json({ error: "Geçerli kullanıcı kimliği bulunamadı." });
     }
 
-    // 3) Filtre
-    const filter = { talepEdenId: new Types.ObjectId(userId) };
+    const filter = { talepEdenId: new mongoose.Types.ObjectId(userId) };
 
-    // 4) Sorgu
     const list = await HastaTalep.find(filter)
       .populate("companions")
       .populate("routes")
