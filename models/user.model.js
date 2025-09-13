@@ -32,34 +32,22 @@ const userSchema = new mongoose.Schema(
       default: {},
     },
 
+    // ekstra string lokasyon etiketleri (opsiyonel)
     locations: { type: [String], default: [] },
+
     tc: { type: String, default: null },
-    departman: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Departman",
-      default: null,
-    },
-    lokasyonlar: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Lokasyon",
-      },
-    ],
-    bolge: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Bolge",
-      default: null,
-    },
+    departman: { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
+
+    // 🔹 Çoklu lokasyon desteği
+    lokasyonlar: [{ type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon" }],
+
+    bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
     ulke: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
     musaitlik: { type: Boolean, default: true },
     telefon: { type: String, default: null },
     mail: { type: String, default: null },
     dogumTarihi: { type: Date, default: null },
-    cinsiyet: {
-      type: String,
-      enum: ["Erkek", "Kadın", "Diğer"],
-      default: null,
-    },
+    cinsiyet: { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
     ehliyet: { type: Boolean, default: false },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
@@ -67,6 +55,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Map -> düz obje
 if (!userSchema.options.toJSON) userSchema.options.toJSON = {};
 userSchema.options.toJSON.transform = function (doc, ret) {
   if (ret.permissions instanceof Map) {

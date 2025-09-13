@@ -76,7 +76,6 @@ const HastaTalepSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Performans için index'ler (isteğe bağlı)
 HastaTalepSchema.index({ lokasyon: 1, atamaDurumu: 1 });
 HastaTalepSchema.index({ sofor: 1, transferTarihi: 1 });
 

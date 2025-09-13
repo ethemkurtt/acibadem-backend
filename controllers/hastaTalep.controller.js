@@ -10,8 +10,6 @@ const Bolge = require("../models/bolge.model");
 const Ulke = require("../models/ulke.model");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 📌 Dosya kaydetme yardımcı (şu an string path geldiği için kullanılmıyor)
-// ─────────────────────────────────────────────────────────────────────────────
 const saveFileInfo = (file, folder) => {
   if (!file) return null;
   const uploadPath = `/uploads/${folder}/${Date.now()}-${file.originalname}`;
@@ -24,23 +22,15 @@ const saveFileInfo = (file, folder) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 📌 Tek route kaydı
-// ─────────────────────────────────────────────────────────────────────────────
 const createRouteRecord = async (hastaId, routeData) => {
   const processSide = async (side) => {
     if (!routeData[side]) return null;
-
     const sideData = { ...routeData[side] };
 
-    if (!sideData.locationId || sideData.locationId === "") {
-      delete sideData.locationId;
-    }
+    if (!sideData.locationId || sideData.locationId === "") delete sideData.locationId;
 
-    if (routeData[side].ticket && routeData[side].ticket !== "") {
-      sideData.ticket = routeData[side].ticket;
-    } else {
-      delete sideData.ticket;
-    }
+    if (routeData[side].ticket && routeData[side].ticket !== "") sideData.ticket = routeData[side].ticket;
+    else delete sideData.ticket;
 
     if (Array.isArray(routeData[side].passport) && routeData[side].passport.length) {
       sideData.passport = routeData[side].passport.join(", ");
@@ -61,9 +51,7 @@ const createRouteRecord = async (hastaId, routeData) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * ✅ POST - Yeni Talep Oluştur
- */
+/** ✅ POST - Yeni Talep Oluştur */
 // ─────────────────────────────────────────────────────────────────────────────
 exports.createHastaTalep = async (req, res) => {
   try {
@@ -76,7 +64,6 @@ exports.createHastaTalep = async (req, res) => {
       ...talepData
     } = req.body;
 
-    // 1) Talebi oluşturan kullanıcı (BODY → header → req.user)
     const headerUserId   = req.get?.("x-user-id");
     const headerUserName = req.get?.("x-user-name");
 
@@ -100,7 +87,7 @@ exports.createHastaTalep = async (req, res) => {
       return res.status(400).json({ error: "talepEdenId geçerli bir ObjectId değil." });
     }
 
-    // 2) transferTarihi & transferTipi türet
+    // transferTarihi & transferTipi türet
     let transferTarihi = talepData.transferTarihi;
     let transferTipi = talepData.transferTipi;
 
@@ -112,9 +99,7 @@ exports.createHastaTalep = async (req, res) => {
           return res.status(400).json({ error: "transferTarihi eksik: en az bir güzergah için pickup tarih/saat seçilmelidir." });
         }
         const dt = new Date(firstPickup.date);
-        if (isNaN(dt.getTime())) {
-          return res.status(400).json({ error: "transferTarihi geçerli bir tarih olmalı." });
-        }
+        if (isNaN(dt.getTime())) return res.status(400).json({ error: "transferTarihi geçerli bir tarih olmalı." });
         transferTarihi = dt;
       }
 
@@ -133,7 +118,6 @@ exports.createHastaTalep = async (req, res) => {
       return res.status(400).json({ error: "transferTarihi/transferTipi zorunludur ve geçerli olmalıdır." });
     }
 
-    // 3) Hasta Talep ana kaydı
     const newTalep = await HastaTalep.create({
       ...talepData,
       transferTarihi,
@@ -142,7 +126,6 @@ exports.createHastaTalep = async (req, res) => {
       talepEdenAdSoyad,
     });
 
-    // 4) Companions
     const companionIds = await Promise.all(
       (companions || []).map(async (c) => {
         const saved = await Companions.create({ ...c, hastaId: newTalep._id });
@@ -150,18 +133,15 @@ exports.createHastaTalep = async (req, res) => {
       })
     );
 
-    // 5) Routes
     const routeIds = await Promise.all((routes || []).map((r) => createRouteRecord(newTalep._id, r)))
       .then((records) => records.map((r) => r._id));
 
-    // 6) Notification Person
     let notificationId = null;
     if (notificationPerson) {
       const saved = await NotificationPerson.create({ ...notificationPerson, hastaId: newTalep._id });
       notificationId = saved._id;
     }
 
-    // 7) Alt ilişkileri bağla
     newTalep.companions = companionIds;
     newTalep.routes = routeIds;
     newTalep.notificationPerson = notificationId;
@@ -184,8 +164,6 @@ exports.createHastaTalep = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Tüm Talepler
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getAllHastaTalepleri = async (req, res) => {
   try {
     const list = await HastaTalep.find()
@@ -202,8 +180,6 @@ exports.getAllHastaTalepleri = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Tek Talep (+ bolge/country adları)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getHastaTalepById = async (req, res) => {
   try {
@@ -234,8 +210,6 @@ exports.getHastaTalepById = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ PUT - Talep Güncelle (alt verileri resetleyip yeniden kurar)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateHastaTalep = async (req, res) => {
   try {
@@ -284,8 +258,6 @@ exports.updateHastaTalep = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ DELETE - Talep Sil (ilişkili verilerle)
-// ─────────────────────────────────────────────────────────────────────────────
 exports.deleteHastaTalep = async (req, res) => {
   try {
     const id = req.params.id;
@@ -303,9 +275,7 @@ exports.deleteHastaTalep = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Kullanıcının Lokasyon(lar)ındaki Tüm Talepler
-//    (user.lokasyonlar[] varsa $in ile, yoksa user.lokasyon tekil ile)
-// ─────────────────────────────────────────────────────────────────────────────
+// ✅ Çoklu lokasyon desteği
 exports.getTaleplerByLokasyon = async (req, res) => {
   try {
     const user = req.user || {};
@@ -333,8 +303,6 @@ exports.getTaleplerByLokasyon = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ PATCH - Araç/Şoför Atama
 // ─────────────────────────────────────────────────────────────────────────────
 exports.assignAracSofor = async (req, res) => {
   try {
@@ -364,8 +332,6 @@ exports.assignAracSofor = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Bekleyen Talepler (çoklu lokasyon desteği)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getBekleyenTalepler = async (req, res) => {
   try {
@@ -405,8 +371,6 @@ exports.getBekleyenTalepler = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Onaylanmış Talepler (çoklu lokasyon desteği)
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getOnaylanmisTalepler = async (req, res) => {
   try {
     const explicitLokasyonId = req.lokasyonId;
@@ -422,10 +386,7 @@ exports.getOnaylanmisTalepler = async (req, res) => {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
-    const filter = {
-      lokasyon: lokasyonFilter,
-      $or: [{ atamaDurumu: "Evet" }, { atamaDurumu: { $exists: true } }],
-    };
+    const filter = { lokasyon: lokasyonFilter, atamaDurumu: "Evet" };
 
     const list = await HastaTalep.find(filter)
       .populate([
@@ -444,9 +405,6 @@ exports.getOnaylanmisTalepler = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Şoför Atamalarım / ById (değişmedi)
-// ─────────────────────────────────────────────────────────────────────────────
 exports.getSoforAtamalarim = async (req, res) => {
   try {
     const soforId = req.user?._id || req.userId;
@@ -506,8 +464,6 @@ exports.getSoforAtamalariById = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ PUT /api/hasta-talep/:id/baslat
-// ─────────────────────────────────────────────────────────────────────────────
 exports.baslatTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -539,8 +495,6 @@ exports.baslatTalep = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ PUT /api/hasta-talep/:id/tamamla
-// ─────────────────────────────────────────────────────────────────────────────
 exports.tamamlaTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -571,6 +525,7 @@ exports.tamamlaTalep = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
 exports.iptalTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -602,6 +557,9 @@ exports.iptalTalep = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ PATCH /api/hasta-talep/:id/lokasyon — Sadece lokasyon değiştirir ve kim
+//    değiştirdiyse tarihçeye yazar.
 exports.updateLokasyon = async (req, res) => {
   try {
     const { id } = req.params;
@@ -617,24 +575,26 @@ exports.updateLokasyon = async (req, res) => {
       return res.status(401).json({ error: "İşlemi yapan kullanıcı bulunamadı." });
     }
 
-    const talep = await HastaTalep.findById(id).populate("lokasyon", "ad");
+    // ⚠️ Burada populate ETMİYORUZ ki talep.lokasyon saf ObjectId kalsın
+    const talep = await HastaTalep.findById(id);
     if (!talep) return res.status(404).json({ error: "Talep bulunamadı." });
 
-    // Aynı lokasyonsa no-op
-    if (String(talep.lokasyon) === String(lokasyonId)) {
-      return res.json({ message: "Lokasyon zaten bu değer.", talep });
+    const currentLokasyonId = talep.lokasyon ? String(talep.lokasyon) : null;
+    if (currentLokasyonId && currentLokasyonId === String(lokasyonId)) {
+      // no-op
+      const already = await HastaTalep.findById(id).populate("lokasyon", "ad");
+      return res.json({ message: "Lokasyon zaten bu değer.", talep: already });
     }
 
-    const eskiLokasyon = talep.lokasyon || null;
+    const eskiLokasyonId = talep.lokasyon || null;
 
-    // Güncelle
     talep.lokasyon = lokasyonId;
     talep.lokasyonSonDegistirenId = userId;
     talep.lokasyonSonDegistirenAdSoyad = userName;
     talep.lokasyonSonDegistirmeZamani = new Date();
 
     talep.lokasyonDegisiklikleri.push({
-      eskiLokasyon: eskiLokasyon?._id || eskiLokasyon,
+      eskiLokasyon: eskiLokasyonId,
       yeniLokasyon: lokasyonId,
       degistirenId: userId,
       degistirenAdSoyad: userName,

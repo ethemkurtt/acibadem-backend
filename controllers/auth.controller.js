@@ -164,59 +164,41 @@ function userResponse(user, access, perms, mergedPermissions) {
 // ───────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
-    const email = String(req.body.email || "").toLowerCase().trim();
-    const password = String(req.body.password || "");
-
-    if (!email || !password) {
-      return res.status(400).json({ error: "E-posta ve şifre zorunludur." });
-    }
+    const { email, password } = req.body;
 
     const user = await User.findOne({ email })
+      .select("+password")
       .populate("departman", "ad")
-      .populate("lokasyon", "ad")
-      .populate("bolge", "ad")
-      .populate("ulke", "ad");
+      .populate("lokasyonlar", "ad"); // 🔑 tekil lokasyon değil!
 
-    if (!user) {
-      return res.status(401).json({ error: "Kullanıcı bulunamadı." });
-    }
+    if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
 
-    const isMatch = await bcrypt.compare(password, user.password || "");
-    if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ error: "Hatalı şifre." });
 
-    // Tüm perms/permissions hesapla + access
-    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
-    const finalAccess = await computeAccess(user, roleDoc);
+    const payload = {
+      id: user._id,
+      email: user.email,
+      roleGroupId: user.roleGroupId
+    };
 
-    // 🔴 ÖNEMLİ: JWT payload'a lokasyon ve roleGroupId eklendi
-    const token = jwt.sign(
-      {
-        id: user._id,
-        role: user.role,
-        access: finalAccess,
-        roles: user.roles || [],
-        perms: finalPerms,
-        permissions: mergedPermissions,
-        lokasyon: user.lokasyon?._id || user.lokasyon || null, // ➜ backend filtreleri için
-        roleGroupId: user.roleGroupId || null,                  // ➜ şoför/sorumlu ayrımı için
-      },
-      getJwtSecret(),
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "12h" });
 
-    return res.json({
-      message: "Giriş başarılı.",
+    res.json({
       token,
-      role: user.role,
-      access: finalAccess,
-      perms: finalPerms,
-      roles: user.roles || [],
-      permissions: mergedPermissions,
-      user: userResponse(user, finalAccess, finalPerms, mergedPermissions),
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        departman: user.departman?._id || null,
+        departmanName: user.departman?.ad || null,
+        lokasyonlar: (user.lokasyonlar || []).map(l => l._id),
+        lokasyonlarNames: (user.lokasyonlar || []).map(l => l.ad)
+      }
     });
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ error: "Sunucu hatası" });
+  } catch (e) {
+    console.error("login error:", e);
+    res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 

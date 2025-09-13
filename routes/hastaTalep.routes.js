@@ -38,5 +38,6 @@ router.put("/:id/atama", hastaTalepController.assignAracSofor);
 router.put('/:id/baslat',  hastaTalepController.baslatTalep);
 router.put('/:id/tamamla', hastaTalepController.tamamlaTalep);
 router.put('/:id/iptal',   hastaTalepController.iptalTalep);
+router.patch("/hasta-talep/:id/lokasyon", authRequired, hastaTalepController.updateLokasyon);
 
 module.exports = router;
