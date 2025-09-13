@@ -10,7 +10,7 @@ const Bolge = require("../models/bolge.model");
 const Ulke = require("../models/ulke.model");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 📌 Dosya kaydetme yardımcı fonksiyonu (şu an string path geldiği için kullanılmıyor)
+// 📌 Dosya kaydetme yardımcı (şu an string path geldiği için kullanılmıyor)
 // ─────────────────────────────────────────────────────────────────────────────
 const saveFileInfo = (file, folder) => {
   if (!file) return null;
@@ -24,7 +24,7 @@ const saveFileInfo = (file, folder) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 📌 Tek route kaydı oluşturma (gelen string değerleri muhafaza eder)
+// 📌 Tek route kaydı
 // ─────────────────────────────────────────────────────────────────────────────
 const createRouteRecord = async (hastaId, routeData) => {
   const processSide = async (side) => {
@@ -32,19 +32,16 @@ const createRouteRecord = async (hastaId, routeData) => {
 
     const sideData = { ...routeData[side] };
 
-    // locationId boşsa tamamen çıkar
     if (!sideData.locationId || sideData.locationId === "") {
       delete sideData.locationId;
     }
 
-    // ticket string ise kaydet
     if (routeData[side].ticket && routeData[side].ticket !== "") {
       sideData.ticket = routeData[side].ticket;
     } else {
       delete sideData.ticket;
     }
 
-    // passport array/string normalize
     if (Array.isArray(routeData[side].passport) && routeData[side].passport.length) {
       sideData.passport = routeData[side].passport.join(", ");
     } else if (routeData[side].passport && routeData[side].passport !== "") {
@@ -66,16 +63,20 @@ const createRouteRecord = async (hastaId, routeData) => {
 // ─────────────────────────────────────────────────────────────────────────────
 /**
  * ✅ POST - Yeni Talep Oluştur
- *  - talepEden bilgilerini ÖNCE BODY’den alır (fallback: header → req.user)
- *  - transferTarihi/transferTipi yoksa routes'tan türetir
- *  - alt koleksiyonları oluşturup HastaTalep ile bağlar
  */
 // ─────────────────────────────────────────────────────────────────────────────
 exports.createHastaTalep = async (req, res) => {
   try {
-    const { companions = [], routes = [], notificationPerson, talepEdenId: bodyUserId, talepEdenAdSoyad: bodyUserName, ...talepData } = req.body;
+    const {
+      companions = [],
+      routes = [],
+      notificationPerson,
+      talepEdenId: bodyUserId,
+      talepEdenAdSoyad: bodyUserName,
+      ...talepData
+    } = req.body;
 
-    // 1) Talebi oluşturan kullanıcı bilgileri (ÖNCE BODY → header → req.user)
+    // 1) Talebi oluşturan kullanıcı (BODY → header → req.user)
     const headerUserId   = req.get?.("x-user-id");
     const headerUserName = req.get?.("x-user-name");
 
@@ -99,7 +100,7 @@ exports.createHastaTalep = async (req, res) => {
       return res.status(400).json({ error: "talepEdenId geçerli bir ObjectId değil." });
     }
 
-    // 2) transferTarihi & transferTipi türet (şema required)
+    // 2) transferTarihi & transferTipi türet
     let transferTarihi = talepData.transferTarihi;
     let transferTipi = talepData.transferTipi;
 
@@ -110,7 +111,7 @@ exports.createHastaTalep = async (req, res) => {
         if (!firstPickup?.date) {
           return res.status(400).json({ error: "transferTarihi eksik: en az bir güzergah için pickup tarih/saat seçilmelidir." });
         }
-        const dt = new Date(firstPickup.date); // datetime-local uyumlu
+        const dt = new Date(firstPickup.date);
         if (isNaN(dt.getTime())) {
           return res.status(400).json({ error: "transferTarihi geçerli bir tarih olmalı." });
         }
@@ -132,7 +133,7 @@ exports.createHastaTalep = async (req, res) => {
       return res.status(400).json({ error: "transferTarihi/transferTipi zorunludur ve geçerli olmalıdır." });
     }
 
-    // 3) Hasta Talep ana kaydı oluştur
+    // 3) Hasta Talep ana kaydı
     const newTalep = await HastaTalep.create({
       ...talepData,
       transferTarihi,
@@ -141,7 +142,7 @@ exports.createHastaTalep = async (req, res) => {
       talepEdenAdSoyad,
     });
 
-    // 4) Companions ekle
+    // 4) Companions
     const companionIds = await Promise.all(
       (companions || []).map(async (c) => {
         const saved = await Companions.create({ ...c, hastaId: newTalep._id });
@@ -149,24 +150,23 @@ exports.createHastaTalep = async (req, res) => {
       })
     );
 
-    // 5) Routes ekle
+    // 5) Routes
     const routeIds = await Promise.all((routes || []).map((r) => createRouteRecord(newTalep._id, r)))
       .then((records) => records.map((r) => r._id));
 
-    // 6) Notification Person ekle
+    // 6) Notification Person
     let notificationId = null;
     if (notificationPerson) {
       const saved = await NotificationPerson.create({ ...notificationPerson, hastaId: newTalep._id });
       notificationId = saved._id;
     }
 
-    // 7) Talep alt ilişkileri bağla
+    // 7) Alt ilişkileri bağla
     newTalep.companions = companionIds;
     newTalep.routes = routeIds;
     newTalep.notificationPerson = notificationId;
     await newTalep.save();
 
-    // (İsterseniz populate ederek tam dönebilirsiniz)
     const populated = await HastaTalep.findById(newTalep._id)
       .populate("companions")
       .populate("routes")
@@ -303,13 +303,22 @@ exports.deleteHastaTalep = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Kullanıcının Lokasyonundaki Tüm Talepler
+// ✅ GET - Kullanıcının Lokasyon(lar)ındaki Tüm Talepler
+//    (user.lokasyonlar[] varsa $in ile, yoksa user.lokasyon tekil ile)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getTaleplerByLokasyon = async (req, res) => {
   try {
-    const lokasyonId = req.user.lokasyon;
+    const user = req.user || {};
+    const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
+    const tekilLokasyon = user.lokasyon || null;
 
-    const talepler = await HastaTalep.find({ lokasyon: lokasyonId })
+    if (!userLokasyonlar.length && !tekilLokasyon) {
+      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+    }
+
+    const lokasyonFilter = userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon;
+
+    const talepler = await HastaTalep.find({ lokasyon: lokasyonFilter })
       .populate("companions")
       .populate("routes")
       .populate("notificationPerson")
@@ -356,17 +365,25 @@ exports.assignAracSofor = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET - Bekleyen Talepler (lokasyona göre, full populate)
+// ✅ GET - Bekleyen Talepler (çoklu lokasyon desteği)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getBekleyenTalepler = async (req, res) => {
   try {
-    const lokasyonId = req.lokasyonId; // middleware’de set edilmiş olmalı
-    if (!lokasyonId) {
+    const explicitLokasyonId = req.lokasyonId;
+    const user = req.user || {};
+    const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
+    const tekilLokasyon = user.lokasyon || null;
+
+    const lokasyonFilter =
+      explicitLokasyonId ||
+      (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
+
+    if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
     const filter = {
-      lokasyon: lokasyonId,
+      lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
     };
 
@@ -387,15 +404,26 @@ exports.getBekleyenTalepler = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ GET - Onaylanmış Talepler (çoklu lokasyon desteği)
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getOnaylanmisTalepler = async (req, res) => {
   try {
-    const lokasyonId = req.lokasyonId; // middleware’de set edilmiş olmalı
-    if (!lokasyonId) {
+    const explicitLokasyonId = req.lokasyonId;
+    const user = req.user || {};
+    const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
+    const tekilLokasyon = user.lokasyon || null;
+
+    const lokasyonFilter =
+      explicitLokasyonId ||
+      (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
+
+    if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
     const filter = {
-      lokasyon: lokasyonId,
+      lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Evet" }, { atamaDurumu: { $exists: true } }],
     };
 
@@ -416,20 +444,18 @@ exports.getOnaylanmisTalepler = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ GET - Şoför Atamalarım / ById (değişmedi)
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getSoforAtamalarim = async (req, res) => {
   try {
     const soforId = req.user?._id || req.userId;
     if (!soforId) return res.status(401).json({ error: 'Şoför kimliği bulunamadı.' });
 
-    // Filtreler (opsiyonel query: status, dateFrom, dateTo)
     const { status, dateFrom, dateTo } = req.query;
 
-    const filter = {
-      sofor: soforId,
-      atamaDurumu: 'Evet'
-    };
-
-    if (status) filter.talepDurumu = status; // Bekliyor | Onaylandı | İptal (şeman)
+    const filter = { sofor: soforId, atamaDurumu: 'Evet' };
+    if (status) filter.talepDurumu = status;
     if (dateFrom || dateTo) {
       filter.transferTarihi = {};
       if (dateFrom) filter.transferTarihi.$gte = new Date(dateFrom);
@@ -437,7 +463,7 @@ exports.getSoforAtamalarim = async (req, res) => {
     }
 
     const list = await HastaTalep.find(filter)
-      .populate('arac')                 // plaka, marka, tip
+      .populate('arac')
       .populate('sofor', 'name telefon')
       .populate('lokasyon', 'ad')
       .populate('companions')
@@ -479,8 +505,9 @@ exports.getSoforAtamalariById = async (req, res) => {
   }
 };
 
-
-// PUT /api/hasta-talep/:id/baslat
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ PUT /api/hasta-talep/:id/baslat
+// ─────────────────────────────────────────────────────────────────────────────
 exports.baslatTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -511,7 +538,9 @@ exports.baslatTalep = async (req, res) => {
   }
 };
 
-// PUT /api/hasta-talep/:id/tamamla
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ PUT /api/hasta-talep/:id/tamamla
+// ─────────────────────────────────────────────────────────────────────────────
 exports.tamamlaTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -542,7 +571,6 @@ exports.tamamlaTalep = async (req, res) => {
   }
 };
 
-// PUT /api/hasta-talep/:id/iptal
 exports.iptalTalep = async (req, res) => {
   try {
     const { id } = req.params;
@@ -571,5 +599,64 @@ exports.iptalTalep = async (req, res) => {
     res.json({ message: 'İş iptal edildi.', talep: populated });
   } catch (err) {
     res.status(500).json({ error: err.message || 'İptal hatası' });
+  }
+};
+
+exports.updateLokasyon = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { lokasyonId } = req.body;
+
+    if (!lokasyonId || !mongoose.Types.ObjectId.isValid(lokasyonId)) {
+      return res.status(400).json({ error: "Geçerli bir lokasyonId giriniz." });
+    }
+
+    const userId = req.user?._id || req.userId;
+    const userName = req.user?.fullName || req.user?.name;
+    if (!userId || !userName) {
+      return res.status(401).json({ error: "İşlemi yapan kullanıcı bulunamadı." });
+    }
+
+    const talep = await HastaTalep.findById(id).populate("lokasyon", "ad");
+    if (!talep) return res.status(404).json({ error: "Talep bulunamadı." });
+
+    // Aynı lokasyonsa no-op
+    if (String(talep.lokasyon) === String(lokasyonId)) {
+      return res.json({ message: "Lokasyon zaten bu değer.", talep });
+    }
+
+    const eskiLokasyon = talep.lokasyon || null;
+
+    // Güncelle
+    talep.lokasyon = lokasyonId;
+    talep.lokasyonSonDegistirenId = userId;
+    talep.lokasyonSonDegistirenAdSoyad = userName;
+    talep.lokasyonSonDegistirmeZamani = new Date();
+
+    talep.lokasyonDegisiklikleri.push({
+      eskiLokasyon: eskiLokasyon?._id || eskiLokasyon,
+      yeniLokasyon: lokasyonId,
+      degistirenId: userId,
+      degistirenAdSoyad: userName,
+      degistirmeZamani: new Date()
+    });
+
+    await talep.save();
+
+    const populated = await HastaTalep.findById(id)
+      .populate("lokasyon", "ad")
+      .populate("companions")
+      .populate("routes")
+      .populate("notificationPerson")
+      .populate("arac")
+      .populate("sofor")
+      .populate("talepEdenId")
+      .populate({ path: "lokasyonDegisiklikleri.eskiLokasyon", select: "ad" })
+      .populate({ path: "lokasyonDegisiklikleri.yeniLokasyon", select: "ad" })
+      .populate({ path: "lokasyonSonDegistirenId", select: "name email" });
+
+    return res.json({ message: "Lokasyon güncellendi.", talep: populated });
+  } catch (err) {
+    return res.status(500).json({ error: "Lokasyon güncellenemedi.", details: err.message });
   }
 };
