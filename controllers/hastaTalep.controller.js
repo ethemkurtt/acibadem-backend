@@ -642,13 +642,25 @@ exports.updateLokasyon = async (req, res) => {
 };
 exports.getMyTalepler = async (req, res) => {
   try {
-    const userId = req.user?._id || req.userId;
+    // 1) Kullanıcı kimliği tüm olasılıklardan toplanır
+    let userId =
+      (req.user && (req.user._id || req.user.id)) ||
+      req.userId ||
+      req.get?.("x-user-id");
 
+    if (typeof userId === "object" && userId?._id) userId = String(userId._id);
+    if (typeof userId === "number") userId = String(userId);
+
+    // 2) Validasyon — burada patlamasını engelliyoruz
     if (!userId || !Types.ObjectId.isValid(userId)) {
-      return res.status(401).json({ error: "Geçerli bir kullanıcı kimliği bulunamadı." });
+      return res.status(401).json({ error: "Geçerli kullanıcı kimliği bulunamadı." });
     }
 
-    const talepler = await HastaTalep.find({ talepEdenId: userId })
+    // 3) Filtre
+    const filter = { talepEdenId: new Types.ObjectId(userId) };
+
+    // 4) Sorgu
+    const list = await HastaTalep.find(filter)
       .populate("companions")
       .populate("routes")
       .populate("notificationPerson")
@@ -656,10 +668,11 @@ exports.getMyTalepler = async (req, res) => {
       .populate("sofor", "name telefon")
       .populate("lokasyon", "ad")
       .populate("talepEdenId")
-      .sort({ createdAt: -1 }); // en yeni önce gelsin
+      .sort({ createdAt: -1 });
 
-    res.json(talepler);
+    return res.json(list);
   } catch (err) {
-    res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
+    console.error("❌ getMyTalepler hata:", err);
+    return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
