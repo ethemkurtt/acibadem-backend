@@ -82,3 +82,16 @@ exports.patchLokasyon = async (req, res) => {
     res.status(400).json({ message: "Kısmi güncelleme hatası", error: err.message });
   }
 };
+exports.createLokasyon = async (req, res) => {
+  try {
+    const { ad } = req.body;
+    if (!ad || ad.trim() === "") {
+      return res.status(400).json({ message: "Lokasyon adı gereklidir." });
+    }
+
+    const yeniLokasyon = await Lokasyon.create({ ad: ad.trim() });
+    res.status(201).json(yeniLokasyon);
+  } catch (err) {
+    res.status(500).json({ message: "Lokasyon eklenemedi", error: err.message });
+  }
+};
