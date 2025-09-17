@@ -110,9 +110,21 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({ message: "Kullanıcı oluşturuldu.", user: await userResponse(populatedUser) });
   } catch (err) {
-    console.error("createUser hatası:", err);
-    res.status(500).json({ error: "Kullanıcı oluşturulamadı." });
+  console.error("createUser hatası:", err);
+
+  // Eğer Mongo duplicate key hatasıysa
+  if (err.code === 11000) {
+    return res.status(409).json({ error: "Bu e-posta zaten kayıtlı." });
   }
+
+  // Geri kalan tüm hataları olduğu gibi JSON’a bas
+  return res.status(500).json({
+    error: "Kullanıcı oluşturulamadı.",
+    details: err.message,       // hata mesajı
+    stack: err.stack,           // stack trace
+    mongoError: err.errors || null // mongoose validation hataları varsa
+  });
+}
 };
 
 // ✅ Hepsini getir

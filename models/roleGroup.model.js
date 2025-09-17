@@ -4,12 +4,10 @@ const mongoose = require("mongoose");
 const VALID_ACTIONS = ["view", "create", "update", "delete"];
 
 const roleGroupSchema = new mongoose.Schema({
-  roleId:   { type: String, required: true, unique: true, trim: true }, // örn: "editor"
-  roleName: { type: String, required: true, trim: true },               // örn: "Editör"
+  roleId:   { type: String, required: true, unique: true, trim: true }, 
+  roleName: { type: String, required: true, trim: true },              
 
-  // Tek bir alan: yetkiler
-  // - perms: ["talepOlustur:hasta", ...] gibi kısa izinler
-  // - permissions: { talepler: ["view","create"], ... } gibi sayfa-aksiyon
+
   yetkiler: {
     perms: { type: [String], default: [] },
     permissions: {
@@ -30,7 +28,7 @@ const roleGroupSchema = new mongoose.Schema({
 
 roleGroupSchema.index({ roleId: 1 }, { unique: true });
 
-// JSON'da Map → düz obje
+
 if (!roleGroupSchema.options.toJSON) roleGroupSchema.options.toJSON = {};
 roleGroupSchema.options.toJSON.transform = function (_doc, ret) {
   if (ret?.yetkiler?.permissions instanceof Map) {
