@@ -46,9 +46,12 @@ exports.authRequired = async (req, res, next) => {
 
     // Hafif select: FE’de lazım olacak alanlar
     const user = await User.findById(userId)
-      .select("name email role roleGroupId permissions perms departman lokasyon bolge ulke")
+      .select(
+        "name email role roleGroupId permissions perms departman lokasyon lokasyonlar bolge ulke"
+      )
       .populate("departman", "ad")
-      .populate("lokasyon", "ad") // hem id hem ad lazım
+      .populate("lokasyon", "ad")
+      .populate("lokasyonlar", "ad") // ✅ çoklu lokasyonları da getir
       .populate("bolge", "ad")
       .populate("ulke", "ad")
       .lean();
@@ -63,7 +66,10 @@ exports.authRequired = async (req, res, next) => {
 
     // Normalize alanlar
     const lokasyonId = asId(user.lokasyon);
-    const lokasyonName = typeof user.lokasyon === "object" && user.lokasyon ? user.lokasyon.ad : null;
+    const lokasyonName =
+      typeof user.lokasyon === "object" && user.lokasyon
+        ? user.lokasyon.ad
+        : null;
 
     // Controller’lar için net ve hafif context
     req.userId = String(user._id);
@@ -88,8 +94,10 @@ exports.authRequired = async (req, res, next) => {
       permissions,
       departman: user.departman?._id || null,
       departmanName: user.departman?.ad || null,
-      lokasyon: lokasyonId,          // id
-      lokasyonName,                  // ad
+      lokasyon: asId(user.lokasyon),
+      lokasyonName: user.lokasyon?.ad || null,
+      lokasyonlar: (user.lokasyonlar || []).map((l) => l._id), // ✅ id array
+      lokasyonlarName: (user.lokasyonlar || []).map((l) => l.ad), // ✅ ad array
       bolge: user.bolge?._id || null,
       bolgeName: user.bolge?.ad || null,
       ulke: user.ulke?._id || null,
