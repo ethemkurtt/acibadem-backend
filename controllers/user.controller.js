@@ -1,5 +1,5 @@
 // ... üst require'lar aynı
-
+const User = require("../models/user.model");
 // helper: response builder (fallback dahil)
 async function userResponse(user) {
   const RoleGroup = require("../models/roleGroup.model");
