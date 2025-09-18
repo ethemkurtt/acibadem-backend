@@ -168,49 +168,75 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = { ...req.body };
 
-    // ❌ Gereksiz alanları temizle
-    delete updateData._token;
-    delete updateData.password; // zaten istemiyorsun
-    delete updateData.password_confirmation;
+    // 1) Giriş verisi
+    const raw = { ...req.body };
 
-    if (updateData.perms && !Array.isArray(updateData.perms)) {
-      return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
+    // 2) Gereksiz/gölgeleyen alanları temizle
+    delete raw._token;
+    delete raw.password;
+    delete raw.password_confirmation;
+
+    // 3) Normalize (tip dönüşümleri)
+    if (raw.hasOwnProperty('ehliyet')) {
+      const v = raw.ehliyet;
+      raw.ehliyet = v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || v === 'on';
+    }
+    if (raw.dogumTarihi) {
+      const d = new Date(raw.dogumTarihi);
+      if (!isNaN(d.getTime())) raw.dogumTarihi = d;
+      else delete raw.dogumTarihi; // tarih parse edilemiyorsa update etme
     }
 
-    if (updateData.lokasyonlar && !Array.isArray(updateData.lokasyonlar)) {
-      return res.status(400).json({ error: "lokasyonlar bir dizi olmalı." });
+    // Tekil lokasyonu diziye yansıt (opsiyonel)
+    if (!raw.lokasyonlar && raw.lokasyon) {
+      raw.lokasyonlar = [raw.lokasyon].filter(Boolean);
     }
 
-    // Tekil lokasyon geldiyse diziye çevir
-    if (!updateData.lokasyonlar && updateData.lokasyon) {
-      updateData.lokasyonlar = [updateData.lokasyon];
+    // 4) Boş stringleri (''), özellikle "değiştirmedim" niyeti varsa set etmeyelim
+    //    (Bilerek boşaltmak istersen FE'den null gönder; null'u burada silmiyoruz)
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === '') delete raw[k];
     }
 
-    // ✅ Güncelleme
-    const updated = await User.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true
-    })
-      .populate("departman", "ad")
-      .populate("lokasyonlar", "ad")
-      .populate("lokasyon", "ad")
-      .populate("bolge", "ad")
-      .populate("ulke", "ad");
-
-    if (!updated) {
-      return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    // 5) Update öncesi dokümanı çek (teşhis için)
+    const before = await User.findById(id).lean();
+    if (!before) {
+      return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
     }
 
-    res.json({
-      message: "Kullanıcı güncellendi.",
-      user: await userResponse(updated)
+    // 6) $set ile güncelle
+    const result = await User.updateOne({ _id: id }, { $set: raw }, { runValidators: true });
+
+    // 7) Update sonrası dokümanı çek
+    const after = await User.findById(id)
+      .populate('departman', 'ad')
+      .populate('lokasyonlar', 'ad')
+      .populate('lokasyon', 'ad')
+      .populate('bolge', 'ad')
+      .populate('ulke', 'ad');
+
+    // 8) Diff (sadece gönderdiğin anahtarlar üzerinden)
+    const diff = {};
+    for (const k of Object.keys(raw)) {
+      diff[k] = { from: before?.[k] ?? null, to: after?.[k] ?? null };
+    }
+
+    return res.json({
+      message: 'Güncelleme denemesi tamamlandı',
+      acknowledged: result.acknowledged,
+      matchedCount: result.matchedCount,   // 1 değilse id yanlış
+      modifiedCount: result.modifiedCount, // 0 ise değerler aynı kalmış olabilir
+      setTried: raw,                       // server’ın gerçekten set etmeye çalıştığı veriler
+      diff,                                // önce/sonra farkı
+      user: await userResponse(after)
     });
-
   } catch (err) {
-    console.error("updateUser hatası:", err);
-    res.status(500).json({ error: "Güncelleme başarısız.", details: err.message });
+    console.error('updateUser hatası:', err);
+    return res.status(500).json({
+      error: 'Güncelleme başarısız.',
+      details: err.message
+    });
   }
 };
 
