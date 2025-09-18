@@ -169,7 +169,7 @@ exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
-
+    console.log(updateData);
     if (updateData.perms && !Array.isArray(updateData.perms)) {
       return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
     }
