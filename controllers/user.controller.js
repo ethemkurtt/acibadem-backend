@@ -164,45 +164,53 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// ✅ Güncelle
+
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
-    console.log(updateData);
+
+    // ❌ Gereksiz alanları temizle
+    delete updateData._token;
+    delete updateData.password; // zaten istemiyorsun
+    delete updateData.password_confirmation;
+
     if (updateData.perms && !Array.isArray(updateData.perms)) {
       return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
-    }
-
-    if (updateData.password) {
-      const bcrypt = require("bcryptjs");
-      updateData.password = await bcrypt.hash(updateData.password, 10);
-    } else {
-      delete updateData.password;
     }
 
     if (updateData.lokasyonlar && !Array.isArray(updateData.lokasyonlar)) {
       return res.status(400).json({ error: "lokasyonlar bir dizi olmalı." });
     }
 
-    // tekil lokasyon geldiyse diziye yansıt
+    // Tekil lokasyon geldiyse diziye çevir
     if (!updateData.lokasyonlar && updateData.lokasyon) {
       updateData.lokasyonlar = [updateData.lokasyon];
     }
 
-    const updated = await User.findByIdAndUpdate(id, updateData, { new: true, runValidators: true })
+    // ✅ Güncelleme
+    const updated = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true
+    })
       .populate("departman", "ad")
       .populate("lokasyonlar", "ad")
       .populate("lokasyon", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    if (!updated) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    if (!updated) {
+      return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    }
 
-    res.json({ message: "Kullanıcı güncellendi.", user: await userResponse(updated) });
+    res.json({
+      message: "Kullanıcı güncellendi.",
+      user: await userResponse(updated)
+    });
+
   } catch (err) {
     console.error("updateUser hatası:", err);
-    res.status(500).json({ error: "Güncelleme başarısız." });
+    res.status(500).json({ error: "Güncelleme başarısız.", details: err.message });
   }
 };
 
