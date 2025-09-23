@@ -381,7 +381,7 @@ exports.getBekleyenTalepler = async (req, res) => {
       lokasyon: { $in: lokasyonlar },
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
     };
-
+    console.log("filter:",filter);
     // Query + populate
     const list = await HastaTalep.find(filter).populate([
       { path: "arac" },
