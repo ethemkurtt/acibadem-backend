@@ -358,19 +358,27 @@ const { ObjectId } = mongoose.Types;
 exports.getBekleyenTalepler = async (req, res) => {
   try {
     const user = req.user || {};
-    console.log(user);
-    // Lokasyonları normalize et
     let lokasyonlar = [];
 
+    // 1) Explicit lokasyonId varsa
     if (req.lokasyonId) {
       lokasyonlar.push(new ObjectId(req.lokasyonId.toString()));
-    } else if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
-      lokasyonlar = user.lokasyonlar
-        .filter(Boolean)
-        .map(lok => new ObjectId(lok.toString()));
-    } else if (user.lokasyon) {
+    }
+
+    // 2) Kullanıcının lokasyonlar array’i varsa
+    if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
+      lokasyonlar.push(
+        ...user.lokasyonlar.filter(Boolean).map(lok => new ObjectId(lok.toString()))
+      );
+    }
+
+    // 3) Tekil lokasyon varsa
+    if (user.lokasyon) {
       lokasyonlar.push(new ObjectId(user.lokasyon.toString()));
     }
+
+    // Duplicate’leri temizle
+    lokasyonlar = [...new Set(lokasyonlar.map(id => id.toString()))].map(id => new ObjectId(id));
 
     if (!lokasyonlar.length) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
@@ -381,8 +389,9 @@ exports.getBekleyenTalepler = async (req, res) => {
       lokasyon: { $in: lokasyonlar },
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
     };
-    console.log("filter:",filter);
-    // Query + populate
+
+    console.log("filter:", filter);
+
     const list = await HastaTalep.find(filter).populate([
       { path: "arac" },
       { path: "sofor" },
@@ -399,6 +408,7 @@ exports.getBekleyenTalepler = async (req, res) => {
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getOnaylanmisTalepler = async (req, res) => {
