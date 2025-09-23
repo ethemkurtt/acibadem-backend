@@ -367,7 +367,7 @@ exports.getBekleyenTalepler = async (req, res) => {
     if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
-    console.log("userLokasyonlar");
+    console.log(userLokasyonlar);
     const filter = {
       lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
