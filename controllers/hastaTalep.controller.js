@@ -358,7 +358,7 @@ const { ObjectId } = mongoose.Types;
 exports.getBekleyenTalepler = async (req, res) => {
   try {
     const user = req.user || {};
-
+    console.log(user);
     // Lokasyonları normalize et
     let lokasyonlar = [];
 
