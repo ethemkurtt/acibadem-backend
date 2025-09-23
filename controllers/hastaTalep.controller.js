@@ -357,45 +357,48 @@ exports.getBekleyenTalepler = async (req, res) => {
   try {
     const explicitLokasyonId = req.lokasyonId;
     const user = req.user || {};
-    const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
-    const tekilLokasyon = user.lokasyon || null;
 
-    // ObjectId tipine normalize et
-    const normalizedLokasyonlar = userLokasyonlar.map(lok => 
-      mongoose.Types.ObjectId(lok)
-    );
+    // Kullanıcı lokasyonları (array olabilir)
+    const userLokasyonlar = Array.isArray(user.lokasyonlar)
+      ? user.lokasyonlar.filter(Boolean).map(lok => new mongoose.Types.ObjectId(lok))
+      : [];
 
+    // Tekil lokasyon (varsa)
+    const tekilLokasyon = user.lokasyon ? new mongoose.Types.ObjectId(user.lokasyon) : null;
+
+    // Lokasyon filtresi oluşturma
     const lokasyonFilter =
       explicitLokasyonId
-        ? mongoose.Types.ObjectId(explicitLokasyonId)
-        : (normalizedLokasyonlar.length ? { $in: normalizedLokasyonlar } : tekilLokasyon);
+        ? new mongoose.Types.ObjectId(explicitLokasyonId)
+        : (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
 
     if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
+    // Filtre
     const filter = {
       lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
     };
 
-    const list = await HastaTalep.find(filter)
-      .populate([
-        { path: "arac" },
-        { path: "sofor" },
-        { path: "lokasyon" },
-        { path: "companions" },
-        { path: "routes" },
-        { path: "notificationPerson" },
-        { path: "talepEdenId" }
-      ]);
+    // Query + populate
+    const list = await HastaTalep.find(filter).populate([
+      { path: "arac" },
+      { path: "sofor" },
+      { path: "lokasyon" },
+      { path: "companions" },
+      { path: "routes" },
+      { path: "notificationPerson" },
+      { path: "talepEdenId" }
+    ]);
 
     return res.json(list);
   } catch (err) {
+    console.error("❌ Bekleyen talepler alınamadı:", err);
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
-
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getOnaylanmisTalepler = async (req, res) => {
   try {
