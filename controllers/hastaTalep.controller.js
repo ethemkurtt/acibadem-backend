@@ -359,15 +359,21 @@ exports.getBekleyenTalepler = async (req, res) => {
     const user = req.user || {};
     const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
     const tekilLokasyon = user.lokasyon || null;
-    
+
+    // ObjectId tipine normalize et
+    const normalizedLokasyonlar = userLokasyonlar.map(lok => 
+      mongoose.Types.ObjectId(lok)
+    );
+
     const lokasyonFilter =
-      explicitLokasyonId ||
-      (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
+      explicitLokasyonId
+        ? mongoose.Types.ObjectId(explicitLokasyonId)
+        : (normalizedLokasyonlar.length ? { $in: normalizedLokasyonlar } : tekilLokasyon);
 
     if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
-    console.log(userLokasyonlar);
+
     const filter = {
       lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
