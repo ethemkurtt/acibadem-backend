@@ -353,32 +353,32 @@ exports.assignAracSofor = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+const { ObjectId } = mongoose.Types;
+
 exports.getBekleyenTalepler = async (req, res) => {
   try {
-    const explicitLokasyonId = req.lokasyonId;
     const user = req.user || {};
 
-    // Kullanıcı lokasyonları (array olabilir)
-    const userLokasyonlar = Array.isArray(user.lokasyonlar)
-      ? user.lokasyonlar.filter(Boolean).map(lok => new mongoose.Types.ObjectId(lok))
-      : [];
+    // Lokasyonları normalize et
+    let lokasyonlar = [];
 
-    // Tekil lokasyon (varsa)
-    const tekilLokasyon = user.lokasyon ? new mongoose.Types.ObjectId(user.lokasyon) : null;
+    if (req.lokasyonId) {
+      lokasyonlar.push(new ObjectId(req.lokasyonId.toString()));
+    } else if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
+      lokasyonlar = user.lokasyonlar
+        .filter(Boolean)
+        .map(lok => new ObjectId(lok.toString()));
+    } else if (user.lokasyon) {
+      lokasyonlar.push(new ObjectId(user.lokasyon.toString()));
+    }
 
-    // Lokasyon filtresi oluşturma
-    const lokasyonFilter =
-      explicitLokasyonId
-        ? new mongoose.Types.ObjectId(explicitLokasyonId)
-        : (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
-
-    if (!lokasyonFilter) {
+    if (!lokasyonlar.length) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
     // Filtre
     const filter = {
-      lokasyon: lokasyonFilter,
+      lokasyon: { $in: lokasyonlar },
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
     };
 
@@ -399,6 +399,7 @@ exports.getBekleyenTalepler = async (req, res) => {
     return res.status(500).json({ error: "Talepler alınamadı.", details: err.message });
   }
 };
+
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getOnaylanmisTalepler = async (req, res) => {
   try {
