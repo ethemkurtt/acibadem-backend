@@ -359,7 +359,7 @@ exports.getBekleyenTalepler = async (req, res) => {
     const user = req.user || {};
     const userLokasyonlar = Array.isArray(user.lokasyonlar) ? user.lokasyonlar.filter(Boolean) : [];
     const tekilLokasyon = user.lokasyon || null;
-
+    
     const lokasyonFilter =
       explicitLokasyonId ||
       (userLokasyonlar.length ? { $in: userLokasyonlar } : tekilLokasyon);
@@ -367,7 +367,7 @@ exports.getBekleyenTalepler = async (req, res) => {
     if (!lokasyonFilter) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
-
+    console.log("userLokasyonlar");
     const filter = {
       lokasyon: lokasyonFilter,
       $or: [{ atamaDurumu: "Hayır" }, { atamaDurumu: { $exists: false } }],
