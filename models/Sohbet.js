@@ -3,8 +3,8 @@ const mongoose = require("mongoose");
 const sohbetSchema = new mongoose.Schema(
   {
     sohbet_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      default: () => new mongoose.Types.ObjectId(),
+      type: String,
+      default: () => new mongoose.Types.ObjectId().toString()
     },
     sohbet_tipi: { type: String, default: null },
     baslatan_user_id: {
@@ -13,7 +13,7 @@ const sohbetSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true, _id: false } // _id otomatik gelmesin
+  { timestamps: true } // _id otomatik eklenecek
 );
 
 module.exports = mongoose.model("Sohbet", sohbetSchema);
