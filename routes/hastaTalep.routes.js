@@ -40,5 +40,6 @@ router.put('/:id/baslat',  hastaTalepController.baslatTalep);
 router.put('/:id/tamamla', hastaTalepController.tamamlaTalep);
 router.put('/:id/iptal',   hastaTalepController.iptalTalep);
 router.patch("/hasta-talep/:id/lokasyon", authRequired, hastaTalepController.updateLokasyon);
+router.patch("/:id/uetds", authRequired, hastaTalepController.updateUetdsSeferReferansNo);
 
 module.exports = router;

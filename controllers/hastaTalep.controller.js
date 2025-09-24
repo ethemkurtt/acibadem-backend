@@ -209,7 +209,38 @@ exports.getHastaTalepById = async (req, res) => {
     res.status(500).json({ error: "Sunucu hatası", details: err.message });
   }
 };
+exports.updateUetdsSeferReferansNo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { uetdsSeferReferansNo } = req.body;
 
+    if (!uetdsSeferReferansNo || typeof uetdsSeferReferansNo !== "string") {
+      return res.status(400).json({ error: "Geçerli bir uetdsSeferReferansNo giriniz." });
+    }
+
+    const talep = await HastaTalep.findByIdAndUpdate(
+      id,
+      { uetdsSeferReferansNo },
+      { new: true }
+    )
+      .populate("companions")
+      .populate("routes")
+      .populate("notificationPerson")
+      .populate("arac")
+      .populate("sofor")
+      .populate("lokasyon")
+      .populate("talepEdenId");
+
+    if (!talep) {
+      return res.status(404).json({ error: "Talep bulunamadı." });
+    }
+
+    return res.json({ message: "UETDS Sefer Referans No güncellendi.", talep });
+  } catch (err) {
+    console.error("❌ UETDS güncelleme hatası:", err);
+    return res.status(500).json({ error: "Güncellenemedi.", details: err.message });
+  }
+};
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateHastaTalep = async (req, res) => {
   try {

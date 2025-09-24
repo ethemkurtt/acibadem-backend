@@ -62,6 +62,7 @@ const HastaTalepSchema = new mongoose.Schema(
     // ✅ Atamayı yapan kişi bilgileri
     atamaYapanId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     atamaYapanAdSoyad: { type: String, default: null },
+    uetdsSeferReferansNo : { type: String, default: null },
     isBaslamaZamani: { type: Date },
     isBitisZamani: { type: Date },
     iptalZamani: { type: Date },
