@@ -19,8 +19,14 @@ const RoutesSchema = new mongoose.Schema({
     flightCode: String,
     departure: Date,
     arrival: Date,
-    ticket: String, // ✅ Dosya bilgisi obje
-    passport: String, // ✅ Array of objects
+    ticket: String,
+    passport: String,
+
+    // 🔹 Yeni eklenen alanlar
+    il_adi: { type: String, default: null },
+    ilce_adi: { type: String, default: null },
+    il_kodu: { type: String, default: null },
+    ilce_kodu: { type: String, default: null },
   },
   drop: {
     type: {
@@ -35,7 +41,13 @@ const RoutesSchema = new mongoose.Schema({
     departure: Date,
     arrival: Date,
     ticket: String,
-    passport:String,
+    passport: String,
+
+    // 🔹 Yeni eklenen alanlar
+    il_adi: { type: String, default: null },
+    ilce_adi: { type: String, default: null },
+    il_kodu: { type: String, default: null },
+    ilce_kodu: { type: String, default: null },
   },
 });
 
