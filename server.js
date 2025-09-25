@@ -16,11 +16,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 const personelTalepRoutes = require("./routes/personelTalep.route");
 
-// const digerTalepRoutes = require("./routes/digerTalep.routes");
-// Statik dosyalar (örneğin resimler)
+
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-// app.use("/api/diger-talep", digerTalepRoutes);
-// 🔗 Route'lar
 const otelRoutes = require("./routes/otel.routes");
 const hastaTalepRoutes = require("./routes/hastaTalep.routes");
 const departmanRoutes = require("./routes/departman.routes");
