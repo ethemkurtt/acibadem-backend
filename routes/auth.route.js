@@ -12,6 +12,7 @@ const router = express.Router();
 
 const { authRequired: authenticate } = require("../middlewares/auth");
 const { requireRole } = require("../middlewares/authz");
+const { validateRequest, authSchemas, userSchemas } = require("../middlewares/validation");
 
 const authController = require("../controllers/auth.controller");
 const userController = require("../controllers/user.controller");
@@ -40,12 +41,12 @@ const forgotLimiter = rateLimit({
    ─────────────────────────────────────────────────────────────────────────── */
 
 // Login
-router.post(["/auth/login", "/login"], loginLimiter, authController.login);
+router.post(["/auth/login", "/login"], loginLimiter, validateRequest(authSchemas.login), authController.login);
 
 // Şifre sıfırlama akışı
-router.post("/auth/forgot", forgotLimiter, authController.forgotPassword);
+router.post("/auth/forgot", forgotLimiter, validateRequest(authSchemas.forgotPassword), authController.forgotPassword);
 router.get("/auth/reset/verify", authController.verifyResetToken);
-router.post("/auth/reset", authController.resetPassword);
+router.post("/auth/reset", validateRequest(authSchemas.resetPassword), authController.resetPassword);
 
 /* ──────────────────────────────────────────────────────────────────────────────
    PROTECTED (JWT zorunlu)
@@ -58,9 +59,9 @@ router.get(["/auth/me", "/me"], authenticate, authController.getMe);
 router.use("/users", authenticate);
 router.get("/users", userController.getAllUsers);
 router.get("/users/:id", userController.getUserById);
-router.put("/users/:id", userController.updateUser);
+router.put("/users/:id", validateRequest(userSchemas.update), userController.updateUser);
 // router.delete("/users/:id", userController.deleteUser);
-router.post("/users", userController.createUser);
+router.post("/users", validateRequest(userSchemas.create), userController.createUser);
 router.get("/soforler",  userController.getSoforler);
 // Sadece superadmin erişimi olan örnek endpoint
 router.get(

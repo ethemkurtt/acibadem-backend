@@ -2,11 +2,17 @@ const axios = require("axios");
 const https = require("https");
 
 const mobilizAxios = axios.create({
-  baseURL: "https://ng.mobiliz.com.tr/su5/api/integrations",
+  baseURL: process.env.MOBILIZ_BASE_URL || "https://ng.mobiliz.com.tr/su5/api/integrations",
   headers: {
-    "Mobiliz-Token": "43afc4b4fb2025ed2b29e4ca48705191e1584e7fcfeb1f276abe4b848f8614bc",
+    "Mobiliz-Token": process.env.MOBILIZ_TOKEN,
   },
   httpsAgent: new https.Agent({ keepAlive: false }), // 🔥 Mobiliz için bu çok önemli
 });
+
+// Token kontrolü
+if (!process.env.MOBILIZ_TOKEN) {
+  console.error("❌ MOBILIZ_TOKEN environment variable is required!");
+  throw new Error("MOBILIZ_TOKEN environment variable is required");
+}
 
 module.exports = mobilizAxios;

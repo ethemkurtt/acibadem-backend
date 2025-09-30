@@ -9,16 +9,25 @@ const app = express();
 // Çevresel değişkenleri yükle (.env'den)
 dotenv.config();
 
+// Güvenlik middleware'leri
+const { helmetConfig, generalLimiter, apiLimiter } = require("./middlewares/security");
+
 // Middleware'ler
+app.use(helmetConfig);
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan("dev"));
+app.use(generalLimiter);
 const personelTalepRoutes = require("./routes/personelTalep.route");
 
 
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// API route'larına rate limiting uygula
+app.use("/api", apiLimiter);
+
 const otelRoutes = require("./routes/otel.routes");
 const hastaTalepRoutes = require("./routes/hastaTalep.routes");
 const departmanRoutes = require("./routes/departman.routes");

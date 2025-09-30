@@ -20,7 +20,11 @@ const FRONTEND_BASE_URL = (
 // Yardımcılar
 // ───────────────────────────────────────────────────────────────────────────────
 function getJwtSecret() {
-  return process.env.JWT_SECRET || "dev-secret";
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is required");
+  }
+  return secret;
 }
 
 function mapLikeToPlainObject(input) {
@@ -207,7 +211,7 @@ exports.login = async (req, res) => {
         roleGroupId: user.roleGroupId || null,
       },
       getJwtSecret(),
-      { expiresIn: "7d" }
+      { expiresIn: "1h" }
     );
 
     res.json({
