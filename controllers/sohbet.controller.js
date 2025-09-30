@@ -24,6 +24,8 @@ exports.createSohbet = async (req, res) => {
     const yeniSohbet = await Sohbet.create({
       sohbet_tipi: sohbet_tipi || null,
       baslatan_user_id: user._id,
+      baslatan_user_name: user.name,
+      baslatan_user_email: user.email,
     });
 
     // 2️⃣ Sohbet kişileri ekle (başlatan + hedef)
@@ -31,10 +33,14 @@ exports.createSohbet = async (req, res) => {
       {
         sohbet_id: yeniSohbet._id, // ObjectId reference kullan
         user_id: user._id,
+        user_name: user.name,
+        user_email: user.email,
       },
       {
         sohbet_id: yeniSohbet._id, // ObjectId reference kullan
         user_id: hedef_user_id,
+        user_name: hedefUser.name,
+        user_email: hedefUser.email,
       },
     ]);
 
@@ -254,34 +260,23 @@ exports.getMySohbets = async (req, res) => {
           user_id_is_null: k.user_id === null
         })));
 
-        // Eğer populate başarısız olduysa, manuel olarak user bilgilerini getir
-        let validKatilimcilar = katilimcilar.filter(k => k.user_id && typeof k.user_id === 'object' && k.user_id._id);
-        
-        if (validKatilimcilar.length === 0) {
-          console.log("⚠️ Populate başarısız, manuel user bilgileri getiriliyor...");
-          
-          // Populate edilmemiş katılımcıları al
-          const unpopulatedKatilimcilar = katilimcilar.filter(k => k.user_id && typeof k.user_id === 'string');
-          
-          // Her katılımcı için user bilgilerini manuel olarak getir
-          validKatilimcilar = await Promise.all(
-            unpopulatedKatilimcilar.map(async (katilimci) => {
-              try {
-                const user = await User.findById(katilimci.user_id).select("name email").lean();
-                return {
-                  ...katilimci,
-                  user_id: user || { _id: katilimci.user_id, name: "Bilinmeyen Kullanıcı", email: "bilinmeyen@email.com" }
-                };
-              } catch (err) {
-                console.error("❌ User bilgisi getirilemedi:", katilimci.user_id, err.message);
-                return {
-                  ...katilimci,
-                  user_id: { _id: katilimci.user_id, name: "Bilinmeyen Kullanıcı", email: "bilinmeyen@email.com" }
-                };
+        // Populate başarısız olursa kaydedilen bilgileri kullan
+        let validKatilimcilar = katilimcilar.map(k => {
+          if (k.user_id && typeof k.user_id === 'object' && k.user_id._id) {
+            // Populate başarılı
+            return k;
+          } else {
+            // Populate başarısız, kaydedilen bilgileri kullan
+            return {
+              ...k,
+              user_id: {
+                _id: k.user_id || k._id,
+                name: k.user_name || "Bilinmeyen Kullanıcı",
+                email: k.user_email || "bilinmeyen@email.com"
               }
-            })
-          );
-        }
+            };
+          }
+        });
 
         // Son mesajı getir
         const sonMesaj = await Mesaj.findOne({ sohbet_id: sohbet._id })
@@ -316,9 +311,9 @@ exports.getMySohbets = async (req, res) => {
           
           // Sohbeti başlatan kişi
           baslatan_user: sohbet.baslatan_user_id ? {
-            user_id: sohbet.baslatan_user_id._id,
-            name: sohbet.baslatan_user_id.name,
-            email: sohbet.baslatan_user_id.email,
+            user_id: sohbet.baslatan_user_id._id || sohbet.baslatan_user_id,
+            name: sohbet.baslatan_user_id.name || sohbet.baslatan_user_name || "Bilinmeyen Kullanıcı",
+            email: sohbet.baslatan_user_id.email || sohbet.baslatan_user_email || "bilinmeyen@email.com",
             role: "baslatan"
           } : null,
           
@@ -425,34 +420,23 @@ exports.getSohbetDetails = async (req, res) => {
       user_id_is_null: k.user_id === null
     })));
 
-    // Eğer populate başarısız olduysa, manuel olarak user bilgilerini getir
-    let validKatilimcilar = katilimcilar.filter(k => k.user_id && typeof k.user_id === 'object' && k.user_id._id);
-    
-    if (validKatilimcilar.length === 0) {
-      console.log("⚠️ getSohbetDetails - Populate başarısız, manuel user bilgileri getiriliyor...");
-      
-      // Populate edilmemiş katılımcıları al
-      const unpopulatedKatilimcilar = katilimcilar.filter(k => k.user_id && typeof k.user_id === 'string');
-      
-      // Her katılımcı için user bilgilerini manuel olarak getir
-      validKatilimcilar = await Promise.all(
-        unpopulatedKatilimcilar.map(async (katilimci) => {
-          try {
-            const user = await User.findById(katilimci.user_id).select("name email").lean();
-            return {
-              ...katilimci,
-              user_id: user || { _id: katilimci.user_id, name: "Bilinmeyen Kullanıcı", email: "bilinmeyen@email.com" }
-            };
-          } catch (err) {
-            console.error("❌ getSohbetDetails - User bilgisi getirilemedi:", katilimci.user_id, err.message);
-            return {
-              ...katilimci,
-              user_id: { _id: katilimci.user_id, name: "Bilinmeyen Kullanıcı", email: "bilinmeyen@email.com" }
-            };
+    // Populate başarısız olursa kaydedilen bilgileri kullan
+    let validKatilimcilar = katilimcilar.map(k => {
+      if (k.user_id && typeof k.user_id === 'object' && k.user_id._id) {
+        // Populate başarılı
+        return k;
+      } else {
+        // Populate başarısız, kaydedilen bilgileri kullan
+        return {
+          ...k,
+          user_id: {
+            _id: k.user_id || k._id,
+            name: k.user_name || "Bilinmeyen Kullanıcı",
+            email: k.user_email || "bilinmeyen@email.com"
           }
-        })
-      );
-    }
+        };
+      }
+    });
 
     // Son mesajı getir
     const sonMesaj = await Mesaj.findOne({ sohbet_id })
@@ -494,9 +478,9 @@ exports.getSohbetDetails = async (req, res) => {
         
         // Sohbeti başlatan kişi
         baslatan_user: sohbet.baslatan_user_id ? {
-          user_id: sohbet.baslatan_user_id._id,
-          name: sohbet.baslatan_user_id.name,
-          email: sohbet.baslatan_user_id.email,
+          user_id: sohbet.baslatan_user_id._id || sohbet.baslatan_user_id,
+          name: sohbet.baslatan_user_id.name || sohbet.baslatan_user_name || "Bilinmeyen Kullanıcı",
+          email: sohbet.baslatan_user_id.email || sohbet.baslatan_user_email || "bilinmeyen@email.com",
           role: "baslatan"
         } : null,
         
