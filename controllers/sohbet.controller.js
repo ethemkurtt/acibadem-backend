@@ -255,7 +255,7 @@ exports.getMySohbets = async (req, res) => {
 
         // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
         const digerKatilimcilar = katilimcilar.filter(k => 
-          k.user_id._id.toString() !== user._id.toString()
+          k.user_id && k.user_id._id && k.user_id._id.toString() !== user._id.toString()
         );
 
         return {
@@ -280,7 +280,7 @@ exports.getMySohbets = async (req, res) => {
           },
           
           // Sohbet ettiği diğer kişiler (login olan hariç)
-          sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
+          sohbet_ettigi_kisiler: digerKatilimcilar.filter(k => k.user_id).map(k => ({
             user_id: k.user_id._id,
             name: k.user_id.name,
             email: k.user_id.email,
@@ -289,12 +289,12 @@ exports.getMySohbets = async (req, res) => {
           })),
           
           // Tüm katılımcılar (detaylı bilgi için)
-          tum_katilimcilar: katilimcilar.map(k => ({
+          tum_katilimcilar: katilimcilar.filter(k => k.user_id).map(k => ({
             user_id: k.user_id._id,
             name: k.user_id.name,
             email: k.user_id.email,
             joined_at: k.joined_at,
-            role: k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString() ? "baslatan" : "katilimci"
+            role: (sohbet.baslatan_user_id && k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
           })),
           
           // Son mesaj bilgisi
@@ -384,7 +384,7 @@ exports.getSohbetDetails = async (req, res) => {
 
     // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
     const digerKatilimcilar = katilimcilar.filter(k => 
-      k.user_id._id.toString() !== user._id.toString()
+      k.user_id && k.user_id._id && k.user_id._id.toString() !== user._id.toString()
     );
 
     return res.json({
@@ -408,15 +408,15 @@ exports.getSohbetDetails = async (req, res) => {
         },
         
         // Sohbeti başlatan kişi
-        baslatan_user: {
+        baslatan_user: sohbet.baslatan_user_id ? {
           user_id: sohbet.baslatan_user_id._id,
           name: sohbet.baslatan_user_id.name,
           email: sohbet.baslatan_user_id.email,
           role: "baslatan"
-        },
+        } : null,
         
         // Sohbet ettiği diğer kişiler (login olan hariç)
-        sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
+        sohbet_ettigi_kisiler: digerKatilimcilar.filter(k => k.user_id).map(k => ({
           user_id: k.user_id._id,
           name: k.user_id.name,
           email: k.user_id.email,
@@ -425,12 +425,12 @@ exports.getSohbetDetails = async (req, res) => {
         })),
         
         // Tüm katılımcılar (detaylı bilgi için)
-        tum_katilimcilar: katilimcilar.map(k => ({
+        tum_katilimcilar: katilimcilar.filter(k => k.user_id).map(k => ({
           user_id: k.user_id._id,
           name: k.user_id.name,
           email: k.user_id.email,
           joined_at: k.joined_at,
-          role: k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString() ? "baslatan" : "katilimci"
+          role: (sohbet.baslatan_user_id && k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
         })),
         
         // Son mesaj bilgisi
