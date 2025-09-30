@@ -488,7 +488,100 @@ Sohbeti başlatan kullanıcının bilgileri:
 
 ---
 
+### 8. **Mesajı Okundu Olarak İşaretle**
+```http
+PUT /api/sohbet/mesajlar/:mesaj_id/read
+```
+
+**Response (200):**
+```json
+{
+  "message": "Mesaj başarıyla okundu olarak işaretlendi.",
+  "mesaj_id": "68d56e6b3450157e947f7a96",
+  "read_at": "2025-09-25T20:32:15.123Z"
+}
+```
+
+---
+
+### 9. **Okunmamış Mesajları Getir**
+```http
+GET /api/sohbet/unread/messages
+```
+
+**Response (200):**
+```json
+{
+  "message": "Okunmamış mesajlar başarıyla getirildi.",
+  "kullanici": {
+    "user_id": "68b068563c5b849b5e8b3fa1",
+    "name": "DENİZ AYTEKİN",
+    "email": "deniz.aytekin@acibadem.com"
+  },
+  "sohbetler": [
+    {
+      "sohbet_id": "68d56e6b3450157e947f7a92",
+      "sohbet_tipi": null,
+      
+      "ben": {
+        "user_id": "68b068563c5b849b5e8b3fa1",
+        "name": "DENİZ AYTEKİN",
+        "email": "deniz.aytekin@acibadem.com",
+        "role": "katilimci"
+      },
+      
+      "baslatan_user": {
+        "user_id": "68b068563c5b849b5e8b3fa1",
+        "name": "DENİZ AYTEKİN",
+        "email": "deniz.aytekin@acibadem.com",
+        "role": "baslatan"
+      },
+      
+      "sohbet_ettigi_kisiler": [
+        {
+          "user_id": "68c1234567890abcdef12345",
+          "name": "AHMET YILMAZ",
+          "email": "ahmet.yilmaz@acibadem.com",
+          "joined_at": "2025-09-25T16:31:39.387Z",
+          "role": "katilimci"
+        }
+      ],
+      
+      "okunmamis_mesajlar": [
+        {
+          "mesaj_id": "68d56e6b3450157e947f7a96",
+          "message": "Merhaba!",
+          "time": "2025-09-25T16:32:15.123Z",
+          "read_at": null,
+          "sender": {
+            "user_id": "68c1234567890abcdef12345",
+            "name": "AHMET YILMAZ",
+            "email": "ahmet.yilmaz@acibadem.com"
+          }
+        }
+      ],
+      
+      "okunmamis_mesaj_sayisi": 1,
+      "toplam_katilimci": 2,
+      "created_at": "2025-09-25T16:31:39.387Z",
+      "updated_at": "2025-09-25T16:32:15.123Z"
+    }
+  ],
+  "toplam_sohbet": 1,
+  "toplam_okunmamis_mesaj": 1
+}
+```
+
+---
+
 ## 🔄 Güncelleme Notları
+
+### v1.4.0 - Mesaj Okuma Sistemi
+- ✅ **read_at alanı eklendi** - Mesaj modelinde yeni okunma tarihi alanı
+- ✅ **Mesaj okuma endpoint'i** - `PUT /api/sohbet/mesajlar/:mesaj_id/read`
+- ✅ **Okunmamış mesajlar endpoint'i** - `GET /api/sohbet/unread/messages`
+- ✅ **Sadece okunmamış mesajlar** - `read_at: null` olan mesajlar
+- ✅ **Mesaj okuma takibi** - Hangi mesajın ne zaman okunduğu
 
 ### v1.3.3 - Temiz Array Response Yapısı
 - ✅ **Index'li property'ler kaldırıldı** - Artık `_0`, `_1` yok

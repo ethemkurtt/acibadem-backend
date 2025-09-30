@@ -755,3 +755,184 @@ exports.deleteMessage = async (req, res) => {
     return res.status(500).json({ error: "Mesaj silinemedi.", details: err.message });
   }
 };
+
+// ✅ Mesajı okundu olarak işaretle
+exports.markMessageAsRead = async (req, res) => {
+  try {
+    const { mesaj_id } = req.params;
+    const user = req.user;
+
+    if (!mesaj_id) {
+      return res.status(400).json({ error: "mesaj_id gerekli." });
+    }
+
+    // Mesajın varlığını kontrol et
+    const mesaj = await Mesaj.findById(mesaj_id);
+    if (!mesaj) {
+      return res.status(404).json({ error: "Mesaj bulunamadı." });
+    }
+
+    // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
+    const sohbetKisi = await SohbetKisileri.findOne({ 
+      sohbet_id: mesaj.sohbet_id, 
+      user_id: user._id 
+    });
+
+    if (!sohbetKisi) {
+      return res.status(403).json({ 
+        error: "Bu mesajı okuma yetkiniz yok." 
+      });
+    }
+
+    // Mesajı okundu olarak işaretle
+    await Mesaj.findByIdAndUpdate(mesaj_id, {
+      read_at: new Date(),
+      okunma_tarihi: new Date() // Eski alanı da güncelle
+    });
+
+    return res.json({
+      message: "Mesaj başarıyla okundu olarak işaretlendi.",
+      mesaj_id: mesaj_id,
+      read_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Mesaj okundu işaretlenemedi:", err);
+    return res.status(500).json({ error: "Mesaj okundu işaretlenemedi.", details: err.message });
+  }
+};
+
+// ✅ Okunmamış mesajları getir
+exports.getUnreadMessages = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Kullanıcının katıldığı sohbetleri getir
+    const sohbetKisileri = await SohbetKisileri.find({ user_id: user._id })
+      .populate({
+        path: "sohbet_id",
+        populate: { path: "baslatan_user_id", select: "name email" },
+      })
+      .lean();
+
+    // Her sohbet için okunmamış mesajları getir
+    const sohbetlerWithUnreadMessages = await Promise.all(
+      sohbetKisileri.map(async (sohbetKisi) => {
+        const sohbet = sohbetKisi.sohbet_id;
+        
+        // Bu sohbetin okunmamış mesajlarını getir
+        const okunmamisMesajlar = await Mesaj.find({ 
+          sohbet_id: sohbet._id,
+          user_id: { $ne: user._id }, // Kendi mesajları hariç
+          read_at: null // Okunmamış mesajlar
+        })
+        .populate("user_id", "name email")
+        .sort({ time: -1 })
+        .lean();
+
+        // Bu sohbetin tüm katılımcılarını getir
+        const katilimcilar = await SohbetKisileri.find({ sohbet_id: sohbet._id })
+          .populate({
+            path: "user_id",
+            select: "name email",
+            model: "User"
+          })
+          .lean();
+
+        // Populate başarısız olursa kaydedilen bilgileri kullan
+        let validKatilimcilar = katilimcilar.map(k => {
+          if (k.user_id && typeof k.user_id === 'object' && k.user_id._id) {
+            return k;
+          } else {
+            return {
+              ...k,
+              user_id: {
+                _id: k.user_id || k._id,
+                name: k.user_name || "Bilinmeyen Kullanıcı",
+                email: k.user_email || "bilinmeyen@email.com"
+              }
+            };
+          }
+        });
+
+        // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
+        const digerKatilimcilar = validKatilimcilar.filter(k => 
+          k.user_id._id.toString() !== user._id.toString()
+        );
+
+        return {
+          // Sohbet bilgileri
+          sohbet_id: sohbet._id,
+          sohbet_tipi: sohbet.sohbet_tipi,
+          
+          // Login olan kullanıcı bilgileri
+          ben: {
+            user_id: user._id,
+            name: user.name,
+            email: user.email,
+            role: "katilimci"
+          },
+          
+          // Sohbeti başlatan kişi
+          baslatan_user: sohbet.baslatan_user_id ? {
+            user_id: sohbet.baslatan_user_id._id || sohbet.baslatan_user_id,
+            name: sohbet.baslatan_user_id.name || sohbet.baslatan_user_name || "Bilinmeyen Kullanıcı",
+            email: sohbet.baslatan_user_id.email || sohbet.baslatan_user_email || "bilinmeyen@email.com",
+            role: "baslatan"
+          } : null,
+          
+          // Sohbet ettiği diğer kişiler (login olan hariç)
+          sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
+            user_id: k.user_id._id,
+            name: k.user_id.name,
+            email: k.user_id.email,
+            joined_at: k.joined_at,
+            role: "katilimci"
+          })),
+          
+          // Okunmamış mesajlar
+          okunmamis_mesajlar: okunmamisMesajlar.map(m => ({
+            mesaj_id: m.mesaj_id,
+            message: m.message,
+            time: m.time,
+            read_at: m.read_at,
+            sender: {
+              user_id: m.user_id._id,
+              name: m.user_id.name,
+              email: m.user_id.email
+            }
+          })),
+          
+          // İstatistikler
+          okunmamis_mesaj_sayisi: okunmamisMesajlar.length,
+          toplam_katilimci: validKatilimcilar.length,
+          
+          // Tarih bilgileri
+          created_at: sohbet.createdAt,
+          updated_at: sohbet.updatedAt
+        };
+      })
+    );
+
+    // Sadece okunmamış mesajı olan sohbetleri filtrele
+    const sohbetlerWithUnreadOnly = sohbetlerWithUnreadMessages.filter(sohbet => 
+      sohbet.okunmamis_mesaj_sayisi > 0
+    );
+
+    return res.json({
+      message: "Okunmamış mesajlar başarıyla getirildi.",
+      kullanici: {
+        user_id: user._id,
+        name: user.name,
+        email: user.email
+      },
+      sohbetler: sohbetlerWithUnreadOnly,
+      toplam_sohbet: sohbetlerWithUnreadOnly.length,
+      toplam_okunmamis_mesaj: sohbetlerWithUnreadOnly.reduce((total, sohbet) => 
+        total + sohbet.okunmamis_mesaj_sayisi, 0
+      )
+    });
+  } catch (err) {
+    console.error("❌ Okunmamış mesajlar alınamadı:", err);
+    return res.status(500).json({ error: "Okunmamış mesajlar alınamadı.", details: err.message });
+  }
+};

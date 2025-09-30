@@ -55,4 +55,10 @@ router.delete("/my/all", authRequired, sohbetController.deleteAllMySohbets);
 // ✅ Sohbet mesajını sil
 router.delete("/:sohbet_id/mesajlar/:mesaj_id", authRequired, sohbetController.deleteMessage);
 
+// ✅ Mesajı okundu olarak işaretle
+router.put("/mesajlar/:mesaj_id/read", authRequired, sohbetController.markMessageAsRead);
+
+// ✅ Okunmamış mesajları getir
+router.get("/unread/messages", authRequired, sohbetController.getUnreadMessages);
+
 module.exports = router;
