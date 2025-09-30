@@ -89,6 +89,9 @@ app.use("/api/plakalar", plakalarRouter);
 
 const sohbetRoutes = require("./routes/sohbet.routes");
 app.use("/api/sohbet", sohbetRoutes);      // → /api/sohbet/...
+
+const takvimRoutes = require("./routes/takvim.routes");
+app.use("/api/takvim", takvimRoutes);      // → /api/takvim/...
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
