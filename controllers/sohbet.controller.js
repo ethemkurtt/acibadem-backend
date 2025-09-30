@@ -368,13 +368,7 @@ exports.getMySohbets = async (req, res) => {
         name: user.name,
         email: user.email
       },
-      ...sohbetlerWithDetails.reduce((acc, sohbet, index) => {
-        // Her sohbet için direkt property olarak ekle
-        Object.keys(sohbet).forEach(key => {
-          acc[`${key}_${index}`] = sohbet[key];
-        });
-        return acc;
-      }, {}),
+      sohbetler: sohbetlerWithDetails,
       toplam_sohbet: sohbetlerWithDetails.length
     });
   } catch (err) {
