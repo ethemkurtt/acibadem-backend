@@ -104,68 +104,66 @@ GET /api/sohbet/my
     "name": "DENİZ AYTEKİN",
     "email": "deniz.aytekin@acibadem.com"
   },
-  "sohbetler": [
-    {
-      "sohbet_id": "68d56e6b3450157e947f7a92",
-      "sohbet_tipi": null,
-      
-      "ben": {
-        "user_id": "68b068563c5b849b5e8b3fa1",
-        "name": "DENİZ AYTEKİN",
-        "email": "deniz.aytekin@acibadem.com",
+  "sohbet_0": {
+    "sohbet_id": "68d56e6b3450157e947f7a92",
+    "sohbet_tipi": null,
+    
+    "ben": {
+      "user_id": "68b068563c5b849b5e8b3fa1",
+      "name": "DENİZ AYTEKİN",
+      "email": "deniz.aytekin@acibadem.com",
+      "role": "katilimci"
+    },
+    
+    "baslatan_user": {
+      "user_id": "68b068563c5b849b5e8b3fa1",
+      "name": "DENİZ AYTEKİN",
+      "email": "deniz.aytekin@acibadem.com",
+      "role": "baslatan"
+    },
+    
+    "sohbet_ettigi_kisiler": [
+      {
+        "user_id": "68c1234567890abcdef12345",
+        "name": "AHMET YILMAZ",
+        "email": "ahmet.yilmaz@acibadem.com",
+        "joined_at": "2025-09-25T16:31:39.387Z",
         "role": "katilimci"
-      },
-      
-      "baslatan_user": {
+      }
+    ],
+    
+    "tum_katilimcilar": [
+      {
         "user_id": "68b068563c5b849b5e8b3fa1",
         "name": "DENİZ AYTEKİN",
         "email": "deniz.aytekin@acibadem.com",
+        "joined_at": "2025-09-25T16:31:39.387Z",
         "role": "baslatan"
       },
-      
-      "sohbet_ettigi_kisiler": [
-        {
-          "user_id": "68c1234567890abcdef12345",
-          "name": "AHMET YILMAZ",
-          "email": "ahmet.yilmaz@acibadem.com",
-          "joined_at": "2025-09-25T16:31:39.387Z",
-          "role": "katilimci"
-        }
-      ],
-      
-      "tum_katilimcilar": [
-        {
-          "user_id": "68b068563c5b849b5e8b3fa1",
-          "name": "DENİZ AYTEKİN",
-          "email": "deniz.aytekin@acibadem.com",
-          "joined_at": "2025-09-25T16:31:39.387Z",
-          "role": "baslatan"
-        },
-        {
-          "user_id": "68c1234567890abcdef12345",
-          "name": "AHMET YILMAZ",
-          "email": "ahmet.yilmaz@acibadem.com",
-          "joined_at": "2025-09-25T16:31:39.387Z",
-          "role": "katilimci"
-        }
-      ],
-      
-      "son_mesaj": {
-        "mesaj_id": "68d56e6b3450157e947f7a96",
-        "message": "Merhaba!",
-        "time": "2025-09-25T16:32:15.123Z",
-        "sender": {
-          "user_id": "68b068563c5b849b5e8b3fa1",
-          "name": "DENİZ AYTEKİN"
-        }
-      },
-      
-      "okunmamis_mesaj_sayisi": 0,
-      "toplam_katilimci": 2,
-      "created_at": "2025-09-25T16:31:39.387Z",
-      "updated_at": "2025-09-25T16:32:15.123Z"
-    }
-  ],
+      {
+        "user_id": "68c1234567890abcdef12345",
+        "name": "AHMET YILMAZ",
+        "email": "ahmet.yilmaz@acibadem.com",
+        "joined_at": "2025-09-25T16:31:39.387Z",
+        "role": "katilimci"
+      }
+    ],
+    
+    "son_mesaj": {
+      "mesaj_id": "68d56e6b3450157e947f7a96",
+      "message": "Merhaba!",
+      "time": "2025-09-25T16:32:15.123Z",
+      "sender": {
+        "user_id": "68b068563c5b849b5e8b3fa1",
+        "name": "DENİZ AYTEKİN"
+      }
+    },
+    
+    "okunmamis_mesaj_sayisi": 0,
+    "toplam_katilimci": 2,
+    "created_at": "2025-09-25T16:31:39.387Z",
+    "updated_at": "2025-09-25T16:32:15.123Z"
+  },
   "toplam_sohbet": 1
 }
 ```
@@ -489,6 +487,12 @@ Sohbeti başlatan kullanıcının bilgileri:
 ---
 
 ## 🔄 Güncelleme Notları
+
+### v1.3.1 - Response Yapısı Değişikliği
+- ✅ **Sohbetler array'i kaldırıldı** - Artık `sohbetler: []` yok
+- ✅ **Doğrudan sohbet objeleri** - `sohbet_0`, `sohbet_1` şeklinde
+- ✅ **Daha temiz response** - Array wrapper olmadan direkt erişim
+- ✅ **Frontend uyumluluğu** - Daha kolay object destructuring
 
 ### v1.3.0 - Sohbet Silme Özellikleri
 - ✅ **Sohbet silme** (`DELETE /api/sohbet/{sohbet_id}`) - Sadece başlatan silebilir

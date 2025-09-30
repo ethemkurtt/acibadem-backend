@@ -368,7 +368,10 @@ exports.getMySohbets = async (req, res) => {
         name: user.name,
         email: user.email
       },
-      sohbetler: sohbetlerWithDetails,
+      ...sohbetlerWithDetails.reduce((acc, sohbet, index) => {
+        acc[`sohbet_${index}`] = sohbet;
+        return acc;
+      }, {}),
       toplam_sohbet: sohbetlerWithDetails.length
     });
   } catch (err) {
