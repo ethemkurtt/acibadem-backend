@@ -181,9 +181,16 @@ exports.getMessages = async (req, res) => {
       { 
         sohbet_id: new mongoose.Types.ObjectId(sohbet_id), 
         user_id: { $ne: user._id },
-        okunma_tarihi: null 
+        $or: [
+          { read_at: null }, // Yeni alan null ise
+          { read_at: { $exists: false } }, // Yeni alan yoksa
+          { okunma_tarihi: null } // Eski alan null ise
+        ]
       },
-      { okunma_tarihi: new Date() }
+      { 
+        read_at: new Date(),
+        okunma_tarihi: new Date() // Eski alanı da güncelle
+      }
     );
 
     return res.json({
@@ -288,7 +295,11 @@ exports.getMySohbets = async (req, res) => {
         const okunmamisMesajSayisi = await Mesaj.countDocuments({
           sohbet_id: sohbet._id,
           user_id: { $ne: user._id },
-          okunma_tarihi: null
+          $or: [
+            { read_at: null }, // Yeni alan null ise
+            { read_at: { $exists: false } }, // Yeni alan yoksa
+            { okunma_tarihi: null } // Eski alan null ise
+          ]
         });
 
         // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
@@ -823,7 +834,11 @@ exports.getUnreadMessages = async (req, res) => {
         const okunmamisMesajlar = await Mesaj.find({ 
           sohbet_id: sohbet._id,
           user_id: { $ne: user._id }, // Kendi mesajları hariç
-          read_at: null // Okunmamış mesajlar
+          $or: [
+            { read_at: null }, // Yeni alan null ise
+            { read_at: { $exists: false } }, // Yeni alan yoksa
+            { okunma_tarihi: null } // Eski alan null ise
+          ]
         })
         .populate("user_id", "name email")
         .sort({ time: -1 })
@@ -934,5 +949,40 @@ exports.getUnreadMessages = async (req, res) => {
   } catch (err) {
     console.error("❌ Okunmamış mesajlar alınamadı:", err);
     return res.status(500).json({ error: "Okunmamış mesajlar alınamadı.", details: err.message });
+  }
+};
+
+// ✅ Tüm okunmamış mesajları okundu olarak işaretle
+exports.markAllMessagesAsRead = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Kullanıcının katıldığı sohbetleri getir
+    const sohbetKisileri = await SohbetKisileri.find({ user_id: user._id }).lean();
+
+    // Tüm sohbetlerdeki okunmamış mesajları okundu olarak işaretle
+    const guncellenenMesajlar = await Mesaj.updateMany(
+      {
+        user_id: { $ne: user._id }, // Kendi mesajları hariç
+        $or: [
+          { read_at: null }, // Yeni alan null ise
+          { read_at: { $exists: false } }, // Yeni alan yoksa
+          { okunma_tarihi: null } // Eski alan null ise
+        ]
+      },
+      {
+        read_at: new Date(),
+        okunma_tarihi: new Date() // Eski alanı da güncelle
+      }
+    );
+
+    return res.json({
+      message: "Tüm okunmamış mesajlar başarıyla okundu olarak işaretlendi.",
+      guncellenen_mesaj_sayisi: guncellenenMesajlar.modifiedCount,
+      read_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Mesajlar okundu işaretlenemedi:", err);
+    return res.status(500).json({ error: "Mesajlar okundu işaretlenemedi.", details: err.message });
   }
 };

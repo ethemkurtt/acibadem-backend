@@ -574,7 +574,29 @@ GET /api/sohbet/unread/messages
 
 ---
 
+### 10. **Tüm Okunmamış Mesajları Okundu Olarak İşaretle**
+```http
+PUT /api/sohbet/messages/read-all
+```
+
+**Response (200):**
+```json
+{
+  "message": "Tüm okunmamış mesajlar başarıyla okundu olarak işaretlendi.",
+  "guncellenen_mesaj_sayisi": 5,
+  "read_at": "2025-09-25T20:35:00.000Z"
+}
+```
+
+---
+
 ## 🔄 Güncelleme Notları
+
+### v1.4.1 - Mesaj Okuma Sistemi Düzeltmeleri
+- ✅ **Okunmamış mesaj sorgusu düzeltildi** - Hem `read_at` hem `okunma_tarihi` kontrol ediliyor
+- ✅ **Tüm mesajları okundu işaretle** - `PUT /api/sohbet/messages/read-all` endpoint'i
+- ✅ **Geriye uyumluluk** - Eski `okunma_tarihi` alanı da destekleniyor
+- ✅ **Mesaj okuma işaretleme** - `getMessages` fonksiyonunda da `read_at` set ediliyor
 
 ### v1.4.0 - Mesaj Okuma Sistemi
 - ✅ **read_at alanı eklendi** - Mesaj modelinde yeni okunma tarihi alanı

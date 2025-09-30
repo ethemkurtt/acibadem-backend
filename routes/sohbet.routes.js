@@ -61,4 +61,7 @@ router.put("/mesajlar/:mesaj_id/read", authRequired, sohbetController.markMessag
 // ✅ Okunmamış mesajları getir
 router.get("/unread/messages", authRequired, sohbetController.getUnreadMessages);
 
+// ✅ Tüm okunmamış mesajları okundu olarak işaretle
+router.put("/messages/read-all", authRequired, sohbetController.markAllMessagesAsRead);
+
 module.exports = router;
