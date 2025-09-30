@@ -9,6 +9,11 @@ const app = express();
 // Çevresel değişkenleri yükle (.env'den)
 dotenv.config();
 
+// Trust proxy ayarı (production için)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Render.com ve diğer proxy'ler için
+}
+
 // Güvenlik middleware'leri
 const { helmetConfig, generalLimiter, apiLimiter } = require("./middlewares/security");
 

@@ -240,6 +240,9 @@ exports.getMySohbets = async (req, res) => {
           .populate("user_id", "name email")
           .lean();
 
+        // Güvenlik kontrolü: populate edilmemiş user_id'leri filtrele
+        const validKatilimcilar = katilimcilar.filter(k => k.user_id && k.user_id._id);
+
         // Son mesajı getir
         const sonMesaj = await Mesaj.findOne({ sohbet_id: sohbet.sohbet_id })
           .populate("user_id", "name")
@@ -254,8 +257,8 @@ exports.getMySohbets = async (req, res) => {
         });
 
         // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
-        const digerKatilimcilar = katilimcilar.filter(k => 
-          k.user_id && k.user_id._id && k.user_id._id.toString() !== user._id.toString()
+        const digerKatilimcilar = validKatilimcilar.filter(k => 
+          k.user_id._id.toString() !== user._id.toString()
         );
 
         return {
@@ -272,15 +275,15 @@ exports.getMySohbets = async (req, res) => {
           },
           
           // Sohbeti başlatan kişi
-          baslatan_user: {
+          baslatan_user: sohbet.baslatan_user_id ? {
             user_id: sohbet.baslatan_user_id._id,
             name: sohbet.baslatan_user_id.name,
             email: sohbet.baslatan_user_id.email,
             role: "baslatan"
-          },
+          } : null,
           
           // Sohbet ettiği diğer kişiler (login olan hariç)
-          sohbet_ettigi_kisiler: digerKatilimcilar.filter(k => k.user_id).map(k => ({
+          sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
             user_id: k.user_id._id,
             name: k.user_id.name,
             email: k.user_id.email,
@@ -289,7 +292,7 @@ exports.getMySohbets = async (req, res) => {
           })),
           
           // Tüm katılımcılar (detaylı bilgi için)
-          tum_katilimcilar: katilimcilar.filter(k => k.user_id).map(k => ({
+          tum_katilimcilar: validKatilimcilar.map(k => ({
             user_id: k.user_id._id,
             name: k.user_id.name,
             email: k.user_id.email,
@@ -310,7 +313,7 @@ exports.getMySohbets = async (req, res) => {
           
           // İstatistikler
           okunmamis_mesaj_sayisi: okunmamisMesajSayisi,
-          toplam_katilimci: katilimcilar.length,
+          toplam_katilimci: validKatilimcilar.length,
           
           // Tarih bilgileri
           created_at: sohbet.createdAt,
@@ -369,6 +372,9 @@ exports.getSohbetDetails = async (req, res) => {
       .populate("user_id", "name email")
       .lean();
 
+    // Güvenlik kontrolü: populate edilmemiş user_id'leri filtrele
+    const validKatilimcilar = katilimcilar.filter(k => k.user_id && k.user_id._id);
+
     // Son mesajı getir
     const sonMesaj = await Mesaj.findOne({ sohbet_id })
       .populate("user_id", "name")
@@ -383,8 +389,8 @@ exports.getSohbetDetails = async (req, res) => {
     });
 
     // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
-    const digerKatilimcilar = katilimcilar.filter(k => 
-      k.user_id && k.user_id._id && k.user_id._id.toString() !== user._id.toString()
+    const digerKatilimcilar = validKatilimcilar.filter(k => 
+      k.user_id._id.toString() !== user._id.toString()
     );
 
     return res.json({
@@ -416,7 +422,7 @@ exports.getSohbetDetails = async (req, res) => {
         } : null,
         
         // Sohbet ettiği diğer kişiler (login olan hariç)
-        sohbet_ettigi_kisiler: digerKatilimcilar.filter(k => k.user_id).map(k => ({
+        sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
           user_id: k.user_id._id,
           name: k.user_id.name,
           email: k.user_id.email,
@@ -425,7 +431,7 @@ exports.getSohbetDetails = async (req, res) => {
         })),
         
         // Tüm katılımcılar (detaylı bilgi için)
-        tum_katilimcilar: katilimcilar.filter(k => k.user_id).map(k => ({
+        tum_katilimcilar: validKatilimcilar.map(k => ({
           user_id: k.user_id._id,
           name: k.user_id.name,
           email: k.user_id.email,
@@ -446,7 +452,7 @@ exports.getSohbetDetails = async (req, res) => {
         
         // İstatistikler
         okunmamis_mesaj_sayisi: okunmamisMesajSayisi,
-        toplam_katilimci: katilimcilar.length,
+        toplam_katilimci: validKatilimcilar.length,
         
         // Tarih bilgileri
         created_at: sohbet.createdAt,
