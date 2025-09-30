@@ -6,7 +6,7 @@ const mesajSchema = new mongoose.Schema(
       type: String,
       default: () => new mongoose.Types.ObjectId().toString()
     },
-    sohbet_id: { type: String, required: true },
+    sohbet_id: { type: mongoose.Schema.Types.ObjectId, ref: "Sohbet", required: true },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     message: { type: String, required: true },
     time: { type: Date, default: Date.now },

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Sohbet = require("../models/Sohbet");
 const SohbetKisileri = require("../models/SohbetKisileri");
 const Mesaj = require("../models/Mesaj");
@@ -28,11 +29,11 @@ exports.createSohbet = async (req, res) => {
     // 2️⃣ Sohbet kişileri ekle (başlatan + hedef)
     await SohbetKisileri.insertMany([
       {
-        sohbet_id: yeniSohbet.sohbet_id,
+        sohbet_id: yeniSohbet._id, // ObjectId reference kullan
         user_id: user._id,
       },
       {
-        sohbet_id: yeniSohbet.sohbet_id,
+        sohbet_id: yeniSohbet._id, // ObjectId reference kullan
         user_id: hedef_user_id,
       },
     ]);
@@ -80,7 +81,7 @@ exports.sendMessage = async (req, res) => {
 
     // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
     const sohbetKisi = await SohbetKisileri.findOne({ 
-      sohbet_id, 
+      sohbet_id: new mongoose.Types.ObjectId(sohbet_id), 
       user_id: user._id 
     });
 
@@ -91,7 +92,7 @@ exports.sendMessage = async (req, res) => {
     }
 
     // Sohbetin varlığını kontrol et
-    const sohbet = await Sohbet.findOne({ sohbet_id });
+    const sohbet = await Sohbet.findById(sohbet_id);
     if (!sohbet) {
       return res.status(404).json({ 
         error: "Sohbet bulunamadı." 
@@ -99,7 +100,7 @@ exports.sendMessage = async (req, res) => {
     }
 
     const yeniMesaj = await Mesaj.create({
-      sohbet_id,
+      sohbet_id: new mongoose.Types.ObjectId(sohbet_id),
       user_id: user._id,
       message: message.trim(),
     });
@@ -137,7 +138,7 @@ exports.getMessages = async (req, res) => {
 
     // Sohbetin varlığını ve kullanıcının katılımcı olup olmadığını kontrol et
     const sohbetKisi = await SohbetKisileri.findOne({ 
-      sohbet_id, 
+      sohbet_id: new mongoose.Types.ObjectId(sohbet_id), 
       user_id: user._id 
     });
 
@@ -148,7 +149,7 @@ exports.getMessages = async (req, res) => {
     }
 
     // Sohbet bilgilerini getir
-    const sohbet = await Sohbet.findOne({ sohbet_id })
+    const sohbet = await Sohbet.findById(sohbet_id)
       .populate("baslatan_user_id", "name email")
       .lean();
 
@@ -159,12 +160,12 @@ exports.getMessages = async (req, res) => {
     }
 
     // Katılımcıları getir
-    const katilimcilar = await SohbetKisileri.find({ sohbet_id })
+    const katilimcilar = await SohbetKisileri.find({ sohbet_id: new mongoose.Types.ObjectId(sohbet_id) })
       .populate("user_id", "name email")
       .lean();
 
     // Mesajları getir
-    const mesajlar = await Mesaj.find({ sohbet_id })
+    const mesajlar = await Mesaj.find({ sohbet_id: new mongoose.Types.ObjectId(sohbet_id) })
       .populate("user_id", "name email")
       .sort({ time: 1 })
       .lean();
@@ -172,7 +173,7 @@ exports.getMessages = async (req, res) => {
     // Mesajları okundu olarak işaretle (kendi mesajları hariç)
     await Mesaj.updateMany(
       { 
-        sohbet_id, 
+        sohbet_id: new mongoose.Types.ObjectId(sohbet_id), 
         user_id: { $ne: user._id },
         okunma_tarihi: null 
       },
@@ -236,7 +237,7 @@ exports.getMySohbets = async (req, res) => {
         const sohbet = sohbetKisi.sohbet_id;
         
         // Bu sohbetin tüm katılımcılarını getir
-        const katilimcilar = await SohbetKisileri.find({ sohbet_id: sohbet.sohbet_id })
+        const katilimcilar = await SohbetKisileri.find({ sohbet_id: sohbet._id })
           .populate({
             path: "user_id",
             select: "name email",
@@ -283,14 +284,14 @@ exports.getMySohbets = async (req, res) => {
         }
 
         // Son mesajı getir
-        const sonMesaj = await Mesaj.findOne({ sohbet_id: sohbet.sohbet_id })
+        const sonMesaj = await Mesaj.findOne({ sohbet_id: sohbet._id })
           .populate("user_id", "name")
           .sort({ time: -1 })
           .lean();
 
         // Okunmamış mesaj sayısını getir
         const okunmamisMesajSayisi = await Mesaj.countDocuments({
-          sohbet_id: sohbet.sohbet_id,
+          sohbet_id: sohbet._id,
           user_id: { $ne: user._id },
           okunma_tarihi: null
         });
@@ -302,7 +303,7 @@ exports.getMySohbets = async (req, res) => {
 
         return {
           // Sohbet bilgileri
-          sohbet_id: sohbet.sohbet_id,
+          sohbet_id: sohbet._id,
           sohbet_tipi: sohbet.sohbet_tipi,
           
           // Login olan kullanıcı bilgileri
@@ -385,7 +386,7 @@ exports.getSohbetDetails = async (req, res) => {
 
     // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
     const sohbetKisi = await SohbetKisileri.findOne({ 
-      sohbet_id, 
+      sohbet_id: new mongoose.Types.ObjectId(sohbet_id), 
       user_id: user._id 
     });
 
@@ -396,7 +397,7 @@ exports.getSohbetDetails = async (req, res) => {
     }
 
     // Sohbet bilgilerini getir
-    const sohbet = await Sohbet.findOne({ sohbet_id })
+    const sohbet = await Sohbet.findById(sohbet_id)
       .populate("baslatan_user_id", "name email")
       .lean();
 
@@ -407,7 +408,7 @@ exports.getSohbetDetails = async (req, res) => {
     }
 
     // Katılımcıları getir
-    const katilimcilar = await SohbetKisileri.find({ sohbet_id })
+    const katilimcilar = await SohbetKisileri.find({ sohbet_id: new mongoose.Types.ObjectId(sohbet_id) })
       .populate({
         path: "user_id",
         select: "name email",
@@ -480,7 +481,7 @@ exports.getSohbetDetails = async (req, res) => {
       },
       sohbet: {
         // Sohbet bilgileri
-        sohbet_id: sohbet.sohbet_id,
+        sohbet_id: sohbet._id,
         sohbet_tipi: sohbet.sohbet_tipi,
         
         // Login olan kullanıcı bilgileri
@@ -678,16 +679,16 @@ exports.deleteAllMySohbets = async (req, res) => {
     // Başlattığı sohbetleri tamamen sil
     for (const sohbet of baslattigiSohbetler) {
       await Promise.all([
-        Mesaj.deleteMany({ sohbet_id: sohbet.sohbet_id }),
-        SohbetKisileri.deleteMany({ sohbet_id: sohbet.sohbet_id }),
-        Sohbet.deleteOne({ sohbet_id: sohbet.sohbet_id })
+        Mesaj.deleteMany({ sohbet_id: sohbet._id }),
+        SohbetKisileri.deleteMany({ sohbet_id: sohbet._id }),
+        Sohbet.deleteOne({ _id: sohbet._id })
       ]);
       deletedCount++;
     }
 
     // Katıldığı diğer sohbetlerden çık
     const katildigiSohbetler = sohbetKisileri.filter(sk => 
-      !baslattigiSohbetler.some(bs => bs.sohbet_id === sk.sohbet_id)
+      !baslattigiSohbetler.some(bs => bs._id.toString() === sk.sohbet_id.toString())
     );
 
     for (const sohbetKisi of katildigiSohbetler) {
