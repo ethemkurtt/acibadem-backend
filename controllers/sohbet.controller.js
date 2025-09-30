@@ -240,8 +240,19 @@ exports.getMySohbets = async (req, res) => {
           .populate("user_id", "name email")
           .lean();
 
+        // Debug: katılımcıları kontrol et
+        console.log("🔍 Debug - Katılımcılar:", katilimcilar.map(k => ({
+          sohbet_kisileri_id: k._id,
+          user_id: k.user_id,
+          user_id_type: typeof k.user_id,
+          user_id_is_object: k.user_id && typeof k.user_id === 'object'
+        })));
+
         // Güvenlik kontrolü: populate edilmemiş user_id'leri filtrele
-        const validKatilimcilar = katilimcilar.filter(k => k.user_id && k.user_id._id);
+        const validKatilimcilar = katilimcilar.filter(k => {
+          // user_id string ise (populate edilmemiş) veya object ise (populate edilmiş) kabul et
+          return k.user_id && (typeof k.user_id === 'string' || (typeof k.user_id === 'object' && k.user_id._id));
+        });
 
         // Son mesajı getir
         const sonMesaj = await Mesaj.findOne({ sohbet_id: sohbet.sohbet_id })
@@ -257,9 +268,10 @@ exports.getMySohbets = async (req, res) => {
         });
 
         // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
-        const digerKatilimcilar = validKatilimcilar.filter(k => 
-          k.user_id._id.toString() !== user._id.toString()
-        );
+        const digerKatilimcilar = validKatilimcilar.filter(k => {
+          const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+          return userId.toString() !== user._id.toString();
+        });
 
         return {
           // Sohbet bilgileri
@@ -283,22 +295,34 @@ exports.getMySohbets = async (req, res) => {
           } : null,
           
           // Sohbet ettiği diğer kişiler (login olan hariç)
-          sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
-            user_id: k.user_id._id,
-            name: k.user_id.name,
-            email: k.user_id.email,
-            joined_at: k.joined_at,
-            role: "katilimci"
-          })),
+          sohbet_ettigi_kisiler: digerKatilimcilar.map(k => {
+            const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+            const userName = typeof k.user_id === 'string' ? 'Bilinmeyen Kullanıcı' : k.user_id.name;
+            const userEmail = typeof k.user_id === 'string' ? 'bilinmeyen@email.com' : k.user_id.email;
+            
+            return {
+              user_id: userId,
+              name: userName,
+              email: userEmail,
+              joined_at: k.joined_at,
+              role: "katilimci"
+            };
+          }),
           
           // Tüm katılımcılar (detaylı bilgi için)
-          tum_katilimcilar: validKatilimcilar.map(k => ({
-            user_id: k.user_id._id,
-            name: k.user_id.name,
-            email: k.user_id.email,
-            joined_at: k.joined_at,
-            role: (sohbet.baslatan_user_id && k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
-          })),
+          tum_katilimcilar: validKatilimcilar.map(k => {
+            const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+            const userName = typeof k.user_id === 'string' ? 'Bilinmeyen Kullanıcı' : k.user_id.name;
+            const userEmail = typeof k.user_id === 'string' ? 'bilinmeyen@email.com' : k.user_id.email;
+            
+            return {
+              user_id: userId,
+              name: userName,
+              email: userEmail,
+              joined_at: k.joined_at,
+              role: (sohbet.baslatan_user_id && userId.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
+            };
+          }),
           
           // Son mesaj bilgisi
           son_mesaj: sonMesaj ? {
@@ -372,8 +396,19 @@ exports.getSohbetDetails = async (req, res) => {
       .populate("user_id", "name email")
       .lean();
 
+    // Debug: katılımcıları kontrol et
+    console.log("🔍 Debug - getSohbetDetails Katılımcılar:", katilimcilar.map(k => ({
+      sohbet_kisileri_id: k._id,
+      user_id: k.user_id,
+      user_id_type: typeof k.user_id,
+      user_id_is_object: k.user_id && typeof k.user_id === 'object'
+    })));
+
     // Güvenlik kontrolü: populate edilmemiş user_id'leri filtrele
-    const validKatilimcilar = katilimcilar.filter(k => k.user_id && k.user_id._id);
+    const validKatilimcilar = katilimcilar.filter(k => {
+      // user_id string ise (populate edilmemiş) veya object ise (populate edilmiş) kabul et
+      return k.user_id && (typeof k.user_id === 'string' || (typeof k.user_id === 'object' && k.user_id._id));
+    });
 
     // Son mesajı getir
     const sonMesaj = await Mesaj.findOne({ sohbet_id })
@@ -389,9 +424,10 @@ exports.getSohbetDetails = async (req, res) => {
     });
 
     // Sohbet ettiği diğer kişileri bul (login olan kullanıcı hariç)
-    const digerKatilimcilar = validKatilimcilar.filter(k => 
-      k.user_id._id.toString() !== user._id.toString()
-    );
+    const digerKatilimcilar = validKatilimcilar.filter(k => {
+      const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+      return userId.toString() !== user._id.toString();
+    });
 
     return res.json({
       message: "Sohbet detayları başarıyla getirildi.",
@@ -422,22 +458,34 @@ exports.getSohbetDetails = async (req, res) => {
         } : null,
         
         // Sohbet ettiği diğer kişiler (login olan hariç)
-        sohbet_ettigi_kisiler: digerKatilimcilar.map(k => ({
-          user_id: k.user_id._id,
-          name: k.user_id.name,
-          email: k.user_id.email,
-          joined_at: k.joined_at,
-          role: "katilimci"
-        })),
+        sohbet_ettigi_kisiler: digerKatilimcilar.map(k => {
+          const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+          const userName = typeof k.user_id === 'string' ? 'Bilinmeyen Kullanıcı' : k.user_id.name;
+          const userEmail = typeof k.user_id === 'string' ? 'bilinmeyen@email.com' : k.user_id.email;
+          
+          return {
+            user_id: userId,
+            name: userName,
+            email: userEmail,
+            joined_at: k.joined_at,
+            role: "katilimci"
+          };
+        }),
         
         // Tüm katılımcılar (detaylı bilgi için)
-        tum_katilimcilar: validKatilimcilar.map(k => ({
-          user_id: k.user_id._id,
-          name: k.user_id.name,
-          email: k.user_id.email,
-          joined_at: k.joined_at,
-          role: (sohbet.baslatan_user_id && k.user_id._id.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
-        })),
+        tum_katilimcilar: validKatilimcilar.map(k => {
+          const userId = typeof k.user_id === 'string' ? k.user_id : k.user_id._id;
+          const userName = typeof k.user_id === 'string' ? 'Bilinmeyen Kullanıcı' : k.user_id.name;
+          const userEmail = typeof k.user_id === 'string' ? 'bilinmeyen@email.com' : k.user_id.email;
+          
+          return {
+            user_id: userId,
+            name: userName,
+            email: userEmail,
+            joined_at: k.joined_at,
+            role: (sohbet.baslatan_user_id && userId.toString() === sohbet.baslatan_user_id._id.toString()) ? "baslatan" : "katilimci"
+          };
+        }),
         
         // Son mesaj bilgisi
         son_mesaj: sonMesaj ? {
