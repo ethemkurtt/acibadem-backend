@@ -369,7 +369,10 @@ exports.getMySohbets = async (req, res) => {
         email: user.email
       },
       ...sohbetlerWithDetails.reduce((acc, sohbet, index) => {
-        acc[`sohbet_${index}`] = sohbet;
+        // Her sohbet için direkt property olarak ekle
+        Object.keys(sohbet).forEach(key => {
+          acc[`${key}_${index}`] = sohbet[key];
+        });
         return acc;
       }, {}),
       toplam_sohbet: sohbetlerWithDetails.length
