@@ -542,3 +542,231 @@ exports.getSohbetDetails = async (req, res) => {
     return res.status(500).json({ error: "Sohbet detayları alınamadı.", details: err.message });
   }
 };
+
+// ✅ Sohbet sil
+exports.deleteSohbet = async (req, res) => {
+  try {
+    const { sohbet_id } = req.params;
+    const user = req.user;
+
+    // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
+    const sohbetKisi = await SohbetKisileri.findOne({ 
+      sohbet_id, 
+      user_id: user._id 
+    });
+
+    if (!sohbetKisi) {
+      return res.status(403).json({ 
+        error: "Bu sohbete erişim yetkiniz yok." 
+      });
+    }
+
+    // Sohbet bilgilerini getir
+    const sohbet = await Sohbet.findOne({ sohbet_id });
+    if (!sohbet) {
+      return res.status(404).json({ 
+        error: "Sohbet bulunamadı." 
+      });
+    }
+
+    // Sohbeti başlatan kişi mi kontrol et (sadece başlatan silebilir)
+    if (sohbet.baslatan_user_id.toString() !== user._id.toString()) {
+      return res.status(403).json({ 
+        error: "Sadece sohbeti başlatan kişi silebilir." 
+      });
+    }
+
+    // İlişkili verileri sil
+    await Promise.all([
+      // Mesajları sil
+      Mesaj.deleteMany({ sohbet_id }),
+      // Katılımcıları sil
+      SohbetKisileri.deleteMany({ sohbet_id }),
+      // Sohbeti sil
+      Sohbet.deleteOne({ sohbet_id })
+    ]);
+
+    return res.json({
+      message: "Sohbet başarıyla silindi.",
+      sohbet_id: sohbet_id,
+      deleted_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Sohbet silinemedi:", err);
+    return res.status(500).json({ error: "Sohbet silinemedi.", details: err.message });
+  }
+};
+
+// ✅ Kullanıcının katıldığı sohbetten çık
+exports.leaveSohbet = async (req, res) => {
+  try {
+    const { sohbet_id } = req.params;
+    const user = req.user;
+
+    // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
+    const sohbetKisi = await SohbetKisileri.findOne({ 
+      sohbet_id, 
+      user_id: user._id 
+    });
+
+    if (!sohbetKisi) {
+      return res.status(403).json({ 
+        error: "Bu sohbete katılımcı değilsiniz." 
+      });
+    }
+
+    // Sohbet bilgilerini getir
+    const sohbet = await Sohbet.findOne({ sohbet_id });
+    if (!sohbet) {
+      return res.status(404).json({ 
+        error: "Sohbet bulunamadı." 
+      });
+    }
+
+    // Sohbeti başlatan kişi mi kontrol et (başlatan çıkamaz, sadece silebilir)
+    if (sohbet.baslatan_user_id.toString() === user._id.toString()) {
+      return res.status(403).json({ 
+        error: "Sohbeti başlatan kişi çıkamaz. Sohbeti silmek için delete endpoint'ini kullanın." 
+      });
+    }
+
+    // Kullanıcıyı sohbetten çıkar
+    await SohbetKisileri.deleteOne({ 
+      sohbet_id, 
+      user_id: user._id 
+    });
+
+    // Kullanıcının mesajlarını "silinmiş" olarak işaretle (mesajları tamamen silme)
+    await Mesaj.deleteMany({ 
+      sohbet_id, 
+      user_id: user._id 
+    });
+
+    return res.json({
+      message: "Sohbetten başarıyla çıkıldı.",
+      sohbet_id: sohbet_id,
+      left_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Sohbetten çıkılamadı:", err);
+    return res.status(500).json({ error: "Sohbetten çıkılamadı.", details: err.message });
+  }
+};
+
+// ✅ Kullanıcının tüm sohbetlerini sil
+exports.deleteAllMySohbets = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Kullanıcının katıldığı tüm sohbetleri getir
+    const sohbetKisileri = await SohbetKisileri.find({ user_id: user._id });
+    
+    if (sohbetKisileri.length === 0) {
+      return res.json({
+        message: "Silinecek sohbet bulunamadı.",
+        deleted_count: 0
+      });
+    }
+
+    // Kullanıcının başlattığı sohbetleri bul
+    const baslattigiSohbetler = await Sohbet.find({ 
+      baslatan_user_id: user._id 
+    });
+
+    let deletedCount = 0;
+
+    // Başlattığı sohbetleri tamamen sil
+    for (const sohbet of baslattigiSohbetler) {
+      await Promise.all([
+        Mesaj.deleteMany({ sohbet_id: sohbet.sohbet_id }),
+        SohbetKisileri.deleteMany({ sohbet_id: sohbet.sohbet_id }),
+        Sohbet.deleteOne({ sohbet_id: sohbet.sohbet_id })
+      ]);
+      deletedCount++;
+    }
+
+    // Katıldığı diğer sohbetlerden çık
+    const katildigiSohbetler = sohbetKisileri.filter(sk => 
+      !baslattigiSohbetler.some(bs => bs.sohbet_id === sk.sohbet_id)
+    );
+
+    for (const sohbetKisi of katildigiSohbetler) {
+      await Promise.all([
+        SohbetKisileri.deleteOne({ 
+          sohbet_id: sohbetKisi.sohbet_id, 
+          user_id: user._id 
+        }),
+        Mesaj.deleteMany({ 
+          sohbet_id: sohbetKisi.sohbet_id, 
+          user_id: user._id 
+        })
+      ]);
+    }
+
+    return res.json({
+      message: "Tüm sohbetler başarıyla silindi.",
+      deleted_sohbet_count: deletedCount,
+      left_sohbet_count: katildigiSohbetler.length,
+      total_processed: sohbetKisileri.length,
+      deleted_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Sohbetler silinemedi:", err);
+    return res.status(500).json({ error: "Sohbetler silinemedi.", details: err.message });
+  }
+};
+
+// ✅ Sohbet mesajını sil
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { sohbet_id, mesaj_id } = req.params;
+    const user = req.user;
+
+    // Kullanıcının bu sohbete katılımcı olup olmadığını kontrol et
+    const sohbetKisi = await SohbetKisileri.findOne({ 
+      sohbet_id, 
+      user_id: user._id 
+    });
+
+    if (!sohbetKisi) {
+      return res.status(403).json({ 
+        error: "Bu sohbete erişim yetkiniz yok." 
+      });
+    }
+
+    // Mesajı bul
+    const mesaj = await Mesaj.findOne({ 
+      sohbet_id, 
+      mesaj_id 
+    });
+
+    if (!mesaj) {
+      return res.status(404).json({ 
+        error: "Mesaj bulunamadı." 
+      });
+    }
+
+    // Sadece mesajı gönderen silebilir
+    if (mesaj.user_id.toString() !== user._id.toString()) {
+      return res.status(403).json({ 
+        error: "Sadece kendi mesajınızı silebilirsiniz." 
+      });
+    }
+
+    // Mesajı sil
+    await Mesaj.deleteOne({ 
+      sohbet_id, 
+      mesaj_id 
+    });
+
+    return res.json({
+      message: "Mesaj başarıyla silindi.",
+      mesaj_id: mesaj_id,
+      sohbet_id: sohbet_id,
+      deleted_at: new Date()
+    });
+  } catch (err) {
+    console.error("❌ Mesaj silinemedi:", err);
+    return res.status(500).json({ error: "Mesaj silinemedi.", details: err.message });
+  }
+};

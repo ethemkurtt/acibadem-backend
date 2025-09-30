@@ -43,4 +43,16 @@ router.get("/:sohbet_id", authRequired, sohbetController.getSohbetDetails);
 // ✅ Sohbet mesajlarını getir
 router.get("/:sohbet_id/mesajlar", authRequired, sohbetController.getMessages);
 
+// ✅ Sohbet sil (sadece başlatan silebilir)
+router.delete("/:sohbet_id", authRequired, sohbetController.deleteSohbet);
+
+// ✅ Sohbetten çık (katılımcılar için)
+router.post("/:sohbet_id/leave", authRequired, sohbetController.leaveSohbet);
+
+// ✅ Kullanıcının tüm sohbetlerini sil
+router.delete("/my/all", authRequired, sohbetController.deleteAllMySohbets);
+
+// ✅ Sohbet mesajını sil
+router.delete("/:sohbet_id/mesajlar/:mesaj_id", authRequired, sohbetController.deleteMessage);
+
 module.exports = router;

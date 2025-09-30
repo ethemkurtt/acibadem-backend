@@ -315,12 +315,103 @@ GET /api/sohbet/{sohbet_id}/mesajlar
 
 ---
 
+### 6. **Sohbet Sil** (Sadece Başlatan)
+```http
+DELETE /api/sohbet/{sohbet_id}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Sohbet başarıyla silindi.",
+  "sohbet_id": "68d56e6b3450157e947f7a92",
+  "deleted_at": "2025-09-25T16:45:00.000Z"
+}
+```
+
+**Response (403):**
+```json
+{
+  "error": "Sadece sohbeti başlatan kişi silebilir."
+}
+```
+
+---
+
+### 7. **Sohbetten Çık** (Katılımcılar İçin)
+```http
+POST /api/sohbet/{sohbet_id}/leave
+```
+
+**Response (200):**
+```json
+{
+  "message": "Sohbetten başarıyla çıkıldı.",
+  "sohbet_id": "68d56e6b3450157e947f7a92",
+  "left_at": "2025-09-25T16:45:00.000Z"
+}
+```
+
+**Response (403):**
+```json
+{
+  "error": "Sohbeti başlatan kişi çıkamaz. Sohbeti silmek için delete endpoint'ini kullanın."
+}
+```
+
+---
+
+### 8. **Tüm Sohbetleri Sil**
+```http
+DELETE /api/sohbet/my/all
+```
+
+**Response (200):**
+```json
+{
+  "message": "Tüm sohbetler başarıyla silindi.",
+  "deleted_sohbet_count": 2,
+  "left_sohbet_count": 3,
+  "total_processed": 5,
+  "deleted_at": "2025-09-25T16:45:00.000Z"
+}
+```
+
+---
+
+### 9. **Mesaj Sil**
+```http
+DELETE /api/sohbet/{sohbet_id}/mesajlar/{mesaj_id}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Mesaj başarıyla silindi.",
+  "mesaj_id": "68d56e6b3450157e947f7a96",
+  "sohbet_id": "68d56e6b3450157e947f7a92",
+  "deleted_at": "2025-09-25T16:45:00.000Z"
+}
+```
+
+**Response (403):**
+```json
+{
+  "error": "Sadece kendi mesajınızı silebilirsiniz."
+}
+```
+
+---
+
 ## 🔒 Güvenlik Özellikleri
 
 ### ✅ Yetkilendirme Kontrolleri
 - Kullanıcı sadece katıldığı sohbetlere erişebilir
 - Mesaj gönderme yetkisi kontrol edilir
 - Sohbet detaylarına erişim kontrol edilir
+- **Sadece sohbeti başlatan kişi sohbeti silebilir**
+- **Katılımcılar sadece sohbetten çıkabilir**
+- **Kullanıcılar sadece kendi mesajlarını silebilir**
 
 ### ✅ Input Validation
 - ObjectId format kontrolü
@@ -398,6 +489,14 @@ Sohbeti başlatan kullanıcının bilgileri:
 ---
 
 ## 🔄 Güncelleme Notları
+
+### v1.3.0 - Sohbet Silme Özellikleri
+- ✅ **Sohbet silme** (`DELETE /api/sohbet/{sohbet_id}`) - Sadece başlatan silebilir
+- ✅ **Sohbetten çıkma** (`POST /api/sohbet/{sohbet_id}/leave`) - Katılımcılar için
+- ✅ **Tüm sohbetleri silme** (`DELETE /api/sohbet/my/all`) - Kullanıcının tüm sohbetleri
+- ✅ **Mesaj silme** (`DELETE /api/sohbet/{sohbet_id}/mesajlar/{mesaj_id}`) - Kendi mesajları
+- ✅ **Güvenlik kontrolleri** - Yetki bazlı silme işlemleri
+- ✅ **İlişkili veri temizliği** - Mesajlar ve katılımcılar otomatik silinir
 
 ### v1.2.0 - Gelişmiş Sohbet Yapısı
 - ✅ **Login olan kullanıcı bilgileri** (`ben`) eklendi
