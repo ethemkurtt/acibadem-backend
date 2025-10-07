@@ -27,7 +27,7 @@ exports.createCombined = async (req, res) => {
 
     // --- Ortak talep alanları
     const talepFields = [
-      "requestType","fullName","passportNo","phone","lokasyon",
+      "requestType","fullName","passportNo","phone","lokasyon","kategori",
       "arac","sofor","atamaDurumu","transferTipi","transferTarihi","transferSaati",
       "talepDurumu","talepEdenId","isDurumu","atamaYapanId","atamaYapanAdSoyad",
       "uetdsSeferReferansNo","lokasyonSonDegistirenId","description"
@@ -39,7 +39,7 @@ exports.createCombined = async (req, res) => {
 
     // --- Hasta tip-özel alanlar
     const hastaFields = [
-      "bolge","country","language","wheelchair","kategori",
+      "bolge","country","language","wheelchair",
       "donusTarihi","donusSaati","refakatciSayisi","bagajSayisi",
       "aciklama","isBaslamaZamani","isBitisZamani","iptalZamani","iptalNedeni"
     ];

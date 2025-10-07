@@ -28,8 +28,6 @@ const HastaTalepDetaySchema = new mongoose.Schema(
     language: { type: String, default: "" },
     wheelchair: { type: String, enum: ["Evet", "Hayır"], default: null },
 
-    kategori: { type: String, default: "" },
-
     companions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Companions" }],
     routes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Routes" }],
     notificationPerson: { type: mongoose.Schema.Types.ObjectId, ref: "NotificationPerson", default: null },
