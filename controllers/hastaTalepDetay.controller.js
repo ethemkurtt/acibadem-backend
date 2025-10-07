@@ -4,9 +4,9 @@ const Talepler = require("../models/talepler/talepler.model");
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
 
 // Bu modellerin isim/konumlarını projendeki gerçek dosya yollarına göre güncelle
-const Companions = require("../models/companions.model");
-const Routes = require("../models/routes.model");
-const NotificationPerson = require("../models/notificationPerson.model");
+const Companions = require("../models/hastaTalepModels/companions.model");
+const Routes = require("../models/hastaTalepModels/routes.model");
+const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 
 const pick = (obj, keys) =>
   keys.reduce((acc, k) => {
