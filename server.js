@@ -5,34 +5,22 @@ const dotenv = require("dotenv");
 const morgan = require("morgan");
 const path = require("path");
 const app = express();
+const taleplerRoutes = require("./routes/talepler.routes");
+const hastaDetayRoutes = require("./routes/hastaTalepDetay.routes");
 
 // Çevresel değişkenleri yükle (.env'den)
 dotenv.config();
 
-// Trust proxy ayarı (production için)
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1); // Render.com ve diğer proxy'ler için
-}
-
-// Güvenlik middleware'leri
-const { helmetConfig, generalLimiter, apiLimiter } = require("./middlewares/security");
-
 // Middleware'ler
-app.use(helmetConfig);
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
-app.use(generalLimiter);
 const personelTalepRoutes = require("./routes/personelTalep.route");
 
 
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// API route'larına rate limiting uygula
-app.use("/api", apiLimiter);
-
 const otelRoutes = require("./routes/otel.routes");
 const hastaTalepRoutes = require("./routes/hastaTalep.routes");
 const departmanRoutes = require("./routes/departman.routes");
@@ -90,8 +78,12 @@ app.use("/api/plakalar", plakalarRouter);
 const sohbetRoutes = require("./routes/sohbet.routes");
 app.use("/api/sohbet", sohbetRoutes);      // → /api/sohbet/...
 
-const takvimRoutes = require("./routes/takvim.routes");
-app.use("/api/takvim", takvimRoutes);      // → /api/takvim/...
+app.use("/talepler", taleplerRoutes);
+app.use("/hasta-detay", hastaDetayRoutes);
+import taleplerRouter from './routes/talepler.routes.js';
+import hastaTalepDetayRouter from './routes/hastaTalepDetay.routes.js';
+app.use('/talepler', taleplerRouter);
+app.use('/hasta-talep-detay', hastaTalepDetayRouter);
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
