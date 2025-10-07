@@ -83,8 +83,8 @@ app.use("/api/plakalar", plakalarRouter);
 app.use("/api/sohbet", sohbetRoutes);
 
 // Yeni eklenen endpoint’ler (CJS):
-app.use("/talepler", taleplerRoutes);
-app.use("/hasta-detay", hastaDetayRoutes);
+app.use("/api/talepler", taleplerRoutes);
+app.use("/api/hasta-detay", hastaDetayRoutes);
 
 // ---- DB ----
 mongoose
