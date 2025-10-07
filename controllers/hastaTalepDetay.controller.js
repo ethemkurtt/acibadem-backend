@@ -3,111 +3,112 @@ const mongoose = require("mongoose");
 const Talepler = require("../models/talepler/talepler.model");
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
 
-function isValidObjectId(id) {
-  return mongoose.Types.ObjectId.isValid(id);
-}
+// Bu modellerin isim/konumlarını projendeki gerçek dosya yollarına göre güncelle
+const Companions = require("../models/companions.model");
+const Routes = require("../models/routes.model");
+const NotificationPerson = require("../models/notificationPerson.model");
 
-// 1) Tek başına HastaDetay oluştur (mevcut bir talep_id için)
-exports.create = async (req, res) => {
-  try {
-    const { talep_id } = req.body || {};
-    if (!talep_id || !isValidObjectId(talep_id)) {
-      return res.status(400).json({ message: "Geçerli talep_id gerekli" });
-    }
+const pick = (obj, keys) =>
+  keys.reduce((acc, k) => {
+    if (obj && Object.prototype.hasOwnProperty.call(obj, k)) acc[k] = obj[k];
+    return acc;
+  }, {});
 
-    const talep = await Talepler.findById(talep_id);
-    if (!talep) return res.status(404).json({ message: "Talepler kaydı bulunamadı" });
-    if (talep.requestType && talep.requestType !== "hasta") {
-      return res.status(400).json({ message: "Talep requestType 'hasta' olmalı" });
-    }
-
-    const doc = await HastaDetay.create(req.body);
-    res.status(201).json(doc);
-  } catch (err) {
-    res.status(400).json({ message: "Hasta detay oluşturulamadı", error: err.message });
-  }
-};
-
-// 2) Birleştirilmiş oluşturma (tek istekle): Talepler + HastaDetay
 exports.createCombined = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { talep = {}, detay = {} } = req.body || {};
+    // İki şekli de destekle: { talep, detay } veya flat body
+    const body = req.body || {};
+    const isFlat = !body.talep && !body.detay;
 
-    // Talep için requestType'ı zorunlu kılalım: 'hasta'
-    const talepPayload = { requestType: "hasta", ...talep };
+    const srcTalep = isFlat ? body : (body.talep || {});
+    const srcDetay = isFlat ? body : (body.detay || {});
 
-    const talepDoc = await Talepler.create([talepPayload], { session });
-    const createdTalep = talepDoc[0];
+    // --- Ortak talep alanları
+    const talepFields = [
+      "requestType","fullName","passportNo","phone","lokasyon",
+      "arac","sofor","atamaDurumu","transferTipi","transferTarihi","transferSaati",
+      "talepDurumu","talepEdenId","isDurumu","atamaYapanId","atamaYapanAdSoyad",
+      "uetdsSeferReferansNo","lokasyonSonDegistirenId","description"
+    ];
+    const talepPayload = pick(srcTalep, talepFields);
 
-    const detayPayload = { ...detay, talep_id: createdTalep._id };
-    const detayDoc = await HastaDetay.create([detayPayload], { session });
+    // requestType'ı garanti altına al
+    talepPayload.requestType = "hasta";
+
+    // --- Hasta tip-özel alanlar
+    const hastaFields = [
+      "bolge","country","language","wheelchair","kategori",
+      "donusTarihi","donusSaati","refakatciSayisi","bagajSayisi",
+      "aciklama","isBaslamaZamani","isBitisZamani","iptalZamani","iptalNedeni"
+    ];
+    const detayPayload = pick(srcDetay, hastaFields);
+
+    // --- Gömülü listeler / objeler
+    const companionsIn = Array.isArray(srcDetay.companions) ? srcDetay.companions
+                       : Array.isArray(srcTalep.companions) ? srcTalep.companions : [];
+    const routesIn = Array.isArray(srcDetay.routes) ? srcDetay.routes
+                    : Array.isArray(srcTalep.routes) ? srcTalep.routes : [];
+    const notifIn = srcDetay.notificationPerson || srcTalep.notificationPerson || null;
+
+    // 1) Talep oluştur
+    const [talepDoc] = await Talepler.create([talepPayload], { session });
+
+    // 2) Gömülüleri gerçek koleksiyonlara yaz ve id'lerini topla
+    let companionIds = [];
+    if (companionsIn.length) {
+      const companionDocs = companionsIn.map(c => ({
+        talep_id: talepDoc._id,
+        fullName: c.fullName || "",
+        passportNo: c.passportNo || ""
+      }));
+      const inserted = await Companions.insertMany(companionDocs, { session });
+      companionIds = inserted.map(x => x._id);
+    }
+
+    let routeIds = [];
+    if (routesIn.length) {
+      const routeDocs = routesIn.map(r => ({
+        talep_id: talepDoc._id,
+        pickup: r.pickup || {},
+        drop: r.drop || {}
+      }));
+      const inserted = await Routes.insertMany(routeDocs, { session });
+      routeIds = inserted.map(x => x._id);
+    }
+
+    let notifId = null;
+    if (notifIn && (notifIn.fullName || notifIn.description)) {
+      const [ins] = await NotificationPerson.create(
+        [{ talep_id: talepDoc._id, fullName: notifIn.fullName || "", description: notifIn.description || "" }],
+        { session }
+      );
+      notifId = ins._id;
+    }
+
+    // 3) HastaDetay oluştur (ilişkileri id olarak yaz)
+    const detayDocPayload = {
+      ...detayPayload,
+      talep_id: talepDoc._id,
+      companions: companionIds,
+      routes: routeIds,
+      notificationPerson: notifId
+    };
+
+    const [detayDoc] = await HastaDetay.create([detayDocPayload], { session });
 
     await session.commitTransaction();
     session.endSession();
 
+    // İstersen response'ta sadeleştirilmiş “resolved” alanları da dönebilirsin
     res.status(201).json({
-      talep: createdTalep,
-      detay: detayDoc[0],
+      talep: talepDoc,
+      detay: detayDoc
     });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
     res.status(400).json({ message: "Birleştirilmiş oluşturma başarısız", error: err.message });
-  }
-};
-
-// 3) Detay'ı talep_id ile getir
-exports.getByTalepId = async (req, res) => {
-  try {
-    const { talepId } = req.params;
-    if (!isValidObjectId(talepId)) return res.status(400).json({ message: "Geçersiz talepId" });
-
-    const doc = await HastaDetay.findOne({ talep_id: talepId })
-      .populate("bolge country notificationPerson")
-      .populate("routes")
-      .populate("companions");
-
-    if (!doc) return res.status(404).json({ message: "Hasta detay bulunamadı" });
-
-    res.json(doc);
-  } catch (err) {
-    res.status(500).json({ message: "Hasta detay getirilemedi", error: err.message });
-  }
-};
-
-// 4) Detay'ı talep_id ile güncelle (upsert opsiyonel)
-exports.updateByTalepId = async (req, res) => {
-  try {
-    const { talepId } = req.params;
-    if (!isValidObjectId(talepId)) return res.status(400).json({ message: "Geçersiz talepId" });
-
-    const updated = await HastaDetay.findOneAndUpdate(
-      { talep_id: talepId },
-      req.body,
-      { new: true, runValidators: true, upsert: false }
-    );
-
-    if (!updated) return res.status(404).json({ message: "Hasta detay bulunamadı" });
-
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ message: "Hasta detay güncellenemedi", error: err.message });
-  }
-};
-
-// 5) Detay'ı talep_id ile sil
-exports.deleteByTalepId = async (req, res) => {
-  try {
-    const { talepId } = req.params;
-    if (!isValidObjectId(talepId)) return res.status(400).json({ message: "Geçersiz talepId" });
-
-    const deleted = await HastaDetay.findOneAndDelete({ talep_id: talepId });
-    if (!deleted) return res.status(404).json({ message: "Hasta detay bulunamadı" });
-
-    res.json({ message: "Silindi", talep_id: talepId });
-  } catch (err) {
-    res.status(500).json({ message: "Hasta detay silinemedi", error: err.message });
   }
 };

@@ -14,8 +14,7 @@ const LokasyonDegisiklikSchema = new mongoose.Schema(
 
 const HastaTalepDetaySchema = new mongoose.Schema(
   {
-    // Bu dokümanın kendi _id'si Mongoose tarafından otomatik üretilir.
-    // Ana talep kaydına bire-bir bağlantı:
+  
     talep_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Talepler",
@@ -24,7 +23,6 @@ const HastaTalepDetaySchema = new mongoose.Schema(
       index: true,
     },
 
-    // Tip-özel alanlar
     bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
     country: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
     language: { type: String, default: "" },
