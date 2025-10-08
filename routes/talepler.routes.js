@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const ctrl = require("../controllers/talepler.controller");
+router.get("/detail/:id", ctrl.getFullById);   // <- YENİ
 // Ortak talepler
 router.post("/", ctrl.create);
 router.get("/", ctrl.list);

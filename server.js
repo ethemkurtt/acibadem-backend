@@ -83,7 +83,7 @@ app.use("/api/plakalar", plakalarRouter);
 app.use("/api/sohbet", sohbetRoutes);
 
 // Yeni eklenen endpoint’ler (CJS):
-app.use("/api/talepler/detail/:id", taleplerRoutes);
+app.use("/api/talepler/", taleplerRoutes);
 app.use("/api/hasta-detay", hastaDetayRoutes);
 
 // ---- DB ----
