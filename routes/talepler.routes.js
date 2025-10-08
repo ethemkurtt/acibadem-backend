@@ -7,6 +7,7 @@ const ctrl = require("../controllers/talepler.controller");
 router.post("/", ctrl.create);
 router.get("/", ctrl.list);
 router.get("/:id", ctrl.getById);
+router.get("/detail/:id", ctrl.getFullById);   // <- YENİ
 router.put("/:id", ctrl.updateById);
 router.delete("/:id", ctrl.deleteById);
 
