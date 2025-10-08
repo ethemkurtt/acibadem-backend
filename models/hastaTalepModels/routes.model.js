@@ -27,6 +27,7 @@ const RoutesSchema = new mongoose.Schema({
 
     // 🔹 Yeni eklenen alanlar
     il_adi: { type: String, default: null },
+    pickupText: { type: String, default: null },
     ulke_kodu: { type: String, default: "TR" },
     ilce_adi: { type: String, default: null },
     il_kodu: { type: String, default: null },
@@ -49,6 +50,7 @@ const RoutesSchema = new mongoose.Schema({
 
     // 🔹 Yeni eklenen alanlar
     il_adi: { type: String, default: null },
+    dropText: { type: String, default: null },
     ulke_kodu: { type: String, default: "TR" },
     ilce_adi: { type: String, default: null },
     il_kodu: { type: String, default: null },
