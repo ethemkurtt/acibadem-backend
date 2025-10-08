@@ -4,8 +4,8 @@ const Talepler = require("../models/talepler/talepler.model");
 const PersonelDetay = require("../models/talepler/personelTalepDetay.model");
 
 // Projendeki gerçek yollarına göre güncelle:
-const Companions = require("../models/companions.model");
-const Routes = require("../models/routes.model");
+const Companions = require("../models/hastaTalepModels/companions.model");
+const Routes = require("../models/hastaTalepModels/routes.model");
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const pick = (obj, keys) =>
