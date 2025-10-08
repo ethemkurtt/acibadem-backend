@@ -10,7 +10,10 @@ const NotificationPerson = require("../models/hastaTalepModels/notificationPerso
 const PersonelDetay = require("../models/talepler/personelTalepDetay.model"); // << yeni
 // Tek bir validator kullan
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
-
+const idsOnly = (arr) =>
+  Array.isArray(arr)
+    ? arr.map((x) => (x && typeof x === "object" && x._id ? x._id : x)).filter(Boolean)
+    : [];
 exports.create = async (req, res) => {
   try {
     const body = req.body || {};
