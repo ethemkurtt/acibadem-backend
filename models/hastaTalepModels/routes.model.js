@@ -14,8 +14,9 @@ const RoutesSchema = new mongoose.Schema({
     locationId: {
       type: mongoose.Schema.Types.ObjectId,
       refPath: "pickup.type",
+      default: null,
     },
-    locationName: String,
+    locationName: { type: String, default: null },
     date: Date,
     person: Number,
     baggage: Number,
@@ -37,8 +38,13 @@ const RoutesSchema = new mongoose.Schema({
     type: {
       type: String,
     },
-    locationId: { type: mongoose.Schema.Types.ObjectId, refPath: "drop.type" },
-    locationName: String,
+    locationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "drop.type",
+      default: null,
+    },
+
+    locationName: { type: String, default: null },
     date: Date,
     person: Number,
     baggage: Number,
