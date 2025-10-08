@@ -8,9 +8,9 @@ const ctrl = require("../controllers/personelTalepDetay.controller");
 
 // Tek başına personel detay CRUD
 router.post("/", ctrl.create);
-router.get("/by-talep/:talepId([0-9a-fA-F]{24})", ctrl.getByTalepId);
-router.put("/by-talep/:talepId([0-9a-fA-F]{24})", ctrl.updateByTalepId);
-router.delete("/by-talep/:talepId([0-9a-fA-F]{24})", ctrl.deleteByTalepId);
+router.get("/by-talep/:talepId", ctrl.getByTalepId);
+router.put("/by-talep/:talepId", ctrl.updateByTalepId);
+router.delete("/by-talep/:talepId", ctrl.deleteByTalepId);
 
 // Birleştirilmiş (Talepler + PersonelDetay) tek endpoint
 router.post("/combined", ctrl.createCombined);
