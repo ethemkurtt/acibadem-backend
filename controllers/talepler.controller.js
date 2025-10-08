@@ -116,6 +116,7 @@ exports.getFullById = async (req, res) => {
     const { id } = req.params;
     if (!isId(id)) return res.status(400).json({ ok: false, message: "Geçersiz id" });
 
+    // Ana talep
     const talep = await Talepler.findById(id)
       .populate([
         { path: "lokasyon" },
@@ -148,6 +149,7 @@ exports.getFullById = async (req, res) => {
         ? detay.notificationPerson
         : await NotificationPerson.findOne({ $or: [{ talep_id: id }, { talepId: id }] }).lean());
     } else {
+      // tip-özel detay olmayan diğerleri için “serbest ilişki” araması
       companions = await Companions.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
       routes = await Routes.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
       notificationPerson = await NotificationPerson.findOne({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
