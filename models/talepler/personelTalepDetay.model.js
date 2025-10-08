@@ -1,0 +1,52 @@
+// models/talepler/personelTalepDetay.model.js
+const mongoose = require("mongoose");
+
+/**
+ * PERSONEL tipine özgü alanlar.
+ * Tüm alanlar opsiyonel ve boş bırakılabilir.
+ * talep_id: varsa Talepler'e bire-bir; yoksa boş kalabilir.
+ */
+const PersonelTalepDetaySchema = new mongoose.Schema(
+  {
+    talep_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Talepler",
+      default: null, // boş bırakılabilir
+      index: true,
+    },
+
+    // Tip-özel alanlar (hepsi opsiyonel)
+    email: { type: String, default: "" },
+    departman: { type: String, default: "" },
+    soforDurumu: {
+      type: String,
+      enum: ["Şoförlü", "Şoförsüz"],
+      default: null, // boş bırakılabilir
+    },
+    aciklama: { type: String, default: "" },
+
+    // İlişkiler (opsiyonel, boş dizi)
+    companions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Companions", default: undefined }],
+    routes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Routes", default: undefined }],
+  },
+  {
+    timestamps: true,
+    minimize: false, 
+    strict: true,
+  }
+);
+
+/**
+ * talep_id varsa benzersiz olsun; yoksa (null/eksik) bir şey dayatmasın.
+ * partial index ile sağlıyoruz.
+ */
+PersonelTalepDetaySchema.index(
+  { talep_id: 1 },
+  { unique: true, partialFilterExpression: { talep_id: { $type: "objectId" } } }
+);
+
+// Faydalı opsiyonel indeksler
+PersonelTalepDetaySchema.index({ departman: 1 });
+PersonelTalepDetaySchema.index({ soforDurumu: 1 });
+
+module.exports = mongoose.model("PersonelTalepDetay", PersonelTalepDetaySchema);

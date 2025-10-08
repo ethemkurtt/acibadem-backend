@@ -85,6 +85,12 @@ app.use("/api/sohbet", sohbetRoutes);
 // Yeni eklenen endpoint’ler (CJS):
 app.use("/api/talepler/", taleplerRoutes);
 app.use("/api/hasta-detay", hastaDetayRoutes);
+const misafirDetayRoutes = require("./routes/misafirTalepDetay.routes");
+app.use("/misafir-detay", misafirDetayRoutes);
+const personelDetayRoutes = require("./routes/personelTalepDetay.routes");
+app.use("/personel-detay", personelDetayRoutes);
+const digerDetayRoutes = require("./routes/digerTalepDetay.routes");
+app.use("/diger-detay", digerDetayRoutes);
 
 // ---- DB ----
 mongoose
