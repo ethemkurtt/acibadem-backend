@@ -2,9 +2,14 @@
 const mongoose = require("mongoose");
 const Talepler = require("../models/talepler/talepler.model");
 
-function isValidObjectId(id) {
-  return mongoose.Types.ObjectId.isValid(id);
-}
+// 🔽 EKLENDİ: getFullById'de kullandıkların
+const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
+const Companions = require("../models/hastaTalepModels/companions.model");
+const Routes = require("../models/hastaTalepModels/routes.model");
+const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
+
+// Tek bir validator kullan
+const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 exports.create = async (req, res) => {
   try {
@@ -18,7 +23,6 @@ exports.create = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    // basit filtreler: requestType, sofor, lokasyon, tarih aralığı
     const {
       requestType,
       sofor,
@@ -33,8 +37,8 @@ exports.list = async (req, res) => {
     const q = {};
     if (requestType) q.requestType = requestType;
     if (atamaDurumu) q.atamaDurumu = atamaDurumu;
-    if (sofor && isValidObjectId(sofor)) q.sofor = sofor;
-    if (lokasyon && isValidObjectId(lokasyon)) q.lokasyon = lokasyon;
+    if (sofor && isId(sofor)) q.sofor = sofor;
+    if (lokasyon && isId(lokasyon)) q.lokasyon = lokasyon;
 
     if (startDate || endDate) {
       q.transferTarihi = {};
@@ -53,12 +57,7 @@ exports.list = async (req, res) => {
       Talepler.countDocuments(q),
     ]);
 
-    res.json({
-      page: Number(page),
-      limit: Number(limit),
-      total,
-      items,
-    });
+    res.json({ page: Number(page), limit: Number(limit), total, items });
   } catch (err) {
     res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
   }
@@ -67,7 +66,7 @@ exports.list = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ message: "Geçersiz id" });
+    if (!isId(id)) return res.status(400).json({ message: "Geçersiz id" });
 
     const doc = await Talepler.findById(id).populate(
       "lokasyon sofor arac talepEdenId atamaYapanId lokasyonSonDegistirenId"
@@ -83,7 +82,7 @@ exports.getById = async (req, res) => {
 exports.updateById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ message: "Geçersiz id" });
+    if (!isId(id)) return res.status(400).json({ message: "Geçersiz id" });
 
     const updated = await Talepler.findByIdAndUpdate(id, req.body, {
       new: true,
@@ -100,7 +99,7 @@ exports.updateById = async (req, res) => {
 exports.deleteById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ message: "Geçersiz id" });
+    if (!isId(id)) return res.status(400).json({ message: "Geçersiz id" });
 
     const deleted = await Talepler.findByIdAndDelete(id);
     if (!deleted) return res.status(404).json({ message: "Kayıt bulunamadı" });
@@ -110,17 +109,13 @@ exports.deleteById = async (req, res) => {
     res.status(500).json({ message: "Talep silinemedi", error: err.message });
   }
 };
-const isId = (id) => mongoose.isValidObjectId(id);
 
-// GET /talepler/:id/full
+// GET /talepler/detail/:id  (tek kaydı, full detayla döner)
 exports.getFullById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isId(id)) {
-      return res.status(400).json({ ok: false, message: "Geçersiz id" });
-    }
+    if (!isId(id)) return res.status(400).json({ ok: false, message: "Geçersiz id" });
 
-    // 1) Ana talep
     const talep = await Talepler.findById(id)
       .populate([
         { path: "lokasyon" },
@@ -132,62 +127,33 @@ exports.getFullById = async (req, res) => {
       ])
       .lean();
 
-    if (!talep) {
-      return res.status(404).json({ ok: false, message: "Talep bulunamadı" });
-    }
+    if (!talep) return res.status(404).json({ ok: false, message: "Talep bulunamadı" });
 
-    // 2) Tip-özel detay + alt koleksiyonlar
-    let detay = null;
-    let companions = [];
-    let routes = [];
-    let notificationPerson = null;
+    let detay = null, companions = [], routes = [], notificationPerson = null;
 
     if (talep.requestType === "hasta") {
-      // a) Hasta detayı (varsa)
       detay = await HastaDetay.findOne({ talep_id: id })
         .populate(["companions", "routes", "notificationPerson"])
         .lean();
 
-      // b) Fallback: Detay boşsa alt koleksiyonlardan çek
-      if (!detay || !Array.isArray(detay.companions) || detay.companions.length === 0) {
-        companions = await Companions.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
-      } else {
-        companions = detay.companions;
-      }
+      companions = (detay?.companions?.length
+        ? detay.companions
+        : await Companions.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean());
 
-      if (!detay || !Array.isArray(detay.routes) || detay.routes.length === 0) {
-        routes = await Routes.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
-      } else {
-        routes = detay.routes;
-      }
+      routes = (detay?.routes?.length
+        ? detay.routes
+        : await Routes.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean());
 
-      if (!detay || !detay.notificationPerson) {
-        notificationPerson = await NotificationPerson.findOne({
-          $or: [{ talep_id: id }, { talepId: id }],
-        }).lean();
-      } else {
-        notificationPerson = detay.notificationPerson;
-      }
+      notificationPerson = (detay?.notificationPerson
+        ? detay.notificationPerson
+        : await NotificationPerson.findOne({ $or: [{ talep_id: id }, { talepId: id }] }).lean());
     } else {
-      // personel/misafir vs. için tip-özel detay olmayabilir
-      detay = null;
       companions = await Companions.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
       routes = await Routes.find({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
-      notificationPerson = await NotificationPerson.findOne({
-        $or: [{ talep_id: id }, { talepId: id }],
-      }).lean();
+      notificationPerson = await NotificationPerson.findOne({ $or: [{ talep_id: id }, { talepId: id }] }).lean();
     }
 
-    return res.json({
-      ok: true,
-      data: {
-        talep,
-        detay,
-        companions,
-        routes,
-        notificationPerson,
-      },
-    });
+    return res.json({ ok: true, data: { talep, detay, companions, routes, notificationPerson } });
   } catch (err) {
     console.error("getFullById error:", err);
     return res.status(500).json({ ok: false, message: "Internal Server Error" });
