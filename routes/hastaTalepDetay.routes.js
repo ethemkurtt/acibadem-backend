@@ -1,6 +1,7 @@
 // routes/hastaTalepDetay.routes.js
 const express = require("express");
 const router = express.Router();
+const validateObjectId = require("../middlewares/validateObjectId");
 const ctrl = require("../controllers/hastaTalepDetay.controller");
 
 // Tek başına detay CRUD
