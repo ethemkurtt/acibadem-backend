@@ -5,6 +5,7 @@ const {
   importLokasyonlar,
   getAllLokasyonlar,
   deleteAllLokasyonlar,
+  getLokasyonById,
   patchLokasyon,
   createLokasyon // ← Ekleme fonksiyonu
 } = require("../controllers/lokasyon.controller");
@@ -15,6 +16,7 @@ router.post("/", createLokasyon);
 // Diğer route'lar
 router.post("/import", importLokasyonlar);
 router.get("/", getAllLokasyonlar);
+router.get("/:id", getLokasyonById);
 router.delete("/", deleteAllLokasyonlar);
 router.patch("/:id", patchLokasyon);
 

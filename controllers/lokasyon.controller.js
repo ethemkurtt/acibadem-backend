@@ -98,3 +98,24 @@ exports.createLokasyon = async (req, res) => {
     res.status(500).json({ message: "Lokasyon eklenemedi", error: err.message });
   }
 };
+
+
+exports.getLokasyonById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Geçersiz ObjectId kontrolü
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Geçersiz lokasyon ID formatı." });
+    }
+
+    const doc = await Lokasyon.findById(id);
+    if (!doc) {
+      return res.status(404).json({ message: "Lokasyon bulunamadı" });
+    }
+
+    return res.json(doc);
+  } catch (err) {
+    return res.status(500).json({ message: "Lokasyon getirilemedi", error: err.message });
+  }
+};
