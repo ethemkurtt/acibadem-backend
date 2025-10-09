@@ -29,7 +29,7 @@ const RoutesSchema = new mongoose.Schema({
     passport: { type: String, default: null },
 
     il_adi: { type: String, default: null },
-    pickupManuelLocation: { type: String, default: null },
+    manuelLocation: { type: String, default: null },
     ulke_kodu: { type: String, default: "TR" },
     ilce_adi: { type: String, default: null },
     il_kodu: { type: String, default: null },
@@ -57,7 +57,7 @@ const RoutesSchema = new mongoose.Schema({
     passport: { type: String, default: null },
 
     il_adi: { type: String, default: null },
-    dropManuelLocation: { type: String, default: null },
+    manuelLocation: { type: String, default: null },
     ulke_kodu: { type: String, default: "TR" },
     ilce_adi: { type: String, default: null },
     il_kodu: { type: String, default: null },
