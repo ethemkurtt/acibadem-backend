@@ -9,7 +9,13 @@ const MisafirDetay = require("../models/talepler/misafirTalepDetay.model");
 const DigerDetay = require("../models/talepler/digerTalepDetay.model");
 
 // ------------------ Güvenli preload (farklı klasör/adlarla kayıtlı olabilir) ------------------
-const safeRequire = (p) => { try { return require(p); } catch { return null; } };
+const safeRequire = (p) => {
+  try {
+    return require(p);
+  } catch {
+    return null;
+  }
+};
 
 // HASTA/PERSONEL ortakları
 safeRequire("../models/hastaTalepModels/companions.model");
@@ -21,14 +27,13 @@ safeRequire("../models/misafirTalepModels/companions.model");
 safeRequire("../models/misafirTalepModels/routes.model");
 safeRequire("../models/misafirTalepModels/notificationPerson.model");
 
-
-
 // ---------------------------------------------------------------------------------------------
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // Ortak: User populate'larında hassas alanları gizle
-const userSelectExclude = "-password -resetPasswordToken -resetPasswordExpires -__v";
+const userSelectExclude =
+  "-password -resetPasswordToken -resetPasswordExpires -__v";
 
 // ---------------------- CRUD (değiştirmeden, ufak temizliklerle) ----------------------
 exports.create = async (req, res) => {
@@ -37,31 +42,47 @@ exports.create = async (req, res) => {
     const doc = await Talepler.create(body);
     res.status(201).json(doc);
   } catch (err) {
-    res.status(400).json({ message: "Talep oluşturulamadı", error: err.message });
+    res
+      .status(400)
+      .json({ message: "Talep oluşturulamadı", error: err.message });
   }
 };
 
 exports.list = async (req, res) => {
   try {
     const {
-      requestType, sofor, lokasyon, atamaDurumu, startDate, endDate,
-      page = 1, limit = 20,
+      requestType,
+      sofor,
+      lokasyon,
+      atamaDurumu,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20,
     } = req.query;
 
     const q = {};
+
+    // Filtreler
     if (requestType) q.requestType = requestType;
     if (atamaDurumu) q.atamaDurumu = atamaDurumu;
     if (sofor && isId(sofor)) q.sofor = sofor;
     if (lokasyon && isId(lokasyon)) q.lokasyon = lokasyon;
 
+    // 🔹 Tarih aralığı filtreleme (transferTarihi üzerinden)
     if (startDate || endDate) {
+      const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
+      const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
+
       q.transferTarihi = {};
-      if (startDate) q.transferTarihi.$gte = new Date(startDate);
-      if (endDate) q.transferTarihi.$lte = new Date(endDate);
+      if (start) q.transferTarihi.$gte = start;
+      if (end) q.transferTarihi.$lte = end;
     }
 
+    // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
+    // Sorgu + toplam sayımı
     const [items, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
@@ -78,9 +99,18 @@ exports.list = async (req, res) => {
       Talepler.countDocuments(q),
     ]);
 
-    res.json({ page: Number(page), limit: Number(limit), total, items });
+    // Yanıt
+    res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+      filters: { startDate, endDate }, // istersen debug için
+    });
   } catch (err) {
-    res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
 
@@ -111,13 +141,16 @@ exports.updateById = async (req, res) => {
     if (!isId(id)) return res.status(400).json({ message: "Geçersiz id" });
 
     const updated = await Talepler.findByIdAndUpdate(id, req.body, {
-      new: true, runValidators: true,
+      new: true,
+      runValidators: true,
     });
     if (!updated) return res.status(404).json({ message: "Kayıt bulunamadı" });
 
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ message: "Talep güncellenemedi", error: err.message });
+    res
+      .status(400)
+      .json({ message: "Talep güncellenemedi", error: err.message });
   }
 };
 
@@ -139,7 +172,8 @@ exports.deleteById = async (req, res) => {
 exports.getFullById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isId(id)) return res.status(400).json({ ok: false, message: "Geçersiz id" });
+    if (!isId(id))
+      return res.status(400).json({ ok: false, message: "Geçersiz id" });
 
     res.set("Cache-Control", "no-store");
 
@@ -155,7 +189,8 @@ exports.getFullById = async (req, res) => {
       ])
       .lean();
 
-    if (!talep) return res.status(404).json({ ok: false, message: "Talep bulunamadı" });
+    if (!talep)
+      return res.status(404).json({ ok: false, message: "Talep bulunamadı" });
 
     let detay = null;
 
@@ -172,15 +207,10 @@ exports.getFullById = async (req, res) => {
           { path: "country" },
         ])
         .lean();
-
     } else if (talep.requestType === "personel") {
       detay = await PersonelDetay.findOne({ talep_id: id })
-        .populate([
-          { path: "companions" },
-          { path: "routes" },
-        ])
+        .populate([{ path: "companions" }, { path: "routes" }])
         .lean();
-
     } else if (talep.requestType === "misafir") {
       // MisafirDetay şemanda ref'ler "MisafirCompanions" / "MisafirRoutes" / "MisafirNotificationPerson" ise
       // yine populate doğru modeli kullanır (preload ettik).
@@ -193,10 +223,8 @@ exports.getFullById = async (req, res) => {
           { path: "country" },
         ])
         .lean();
-
     } else if (talep.requestType === "diger") {
       detay = await DigerDetay.findOne({ talep_id: id }).lean();
-
     } else {
       // bilinmeyen tip
       detay = null;
@@ -207,12 +235,14 @@ exports.getFullById = async (req, res) => {
     return res.json({
       ok: true,
       data: {
-        talep,                 // okunabilir alanlar (lokasyon, talepEdenId vb. populate)
-        detay: detay || null,  // companions/routes/notificationPerson TAM OBJE (ID değil)
+        talep, // okunabilir alanlar (lokasyon, talepEdenId vb. populate)
+        detay: detay || null, // companions/routes/notificationPerson TAM OBJE (ID değil)
       },
     });
   } catch (err) {
     console.error("getFullById error:", err);
-    return res.status(500).json({ ok: false, message: "Internal Server Error" });
+    return res
+      .status(500)
+      .json({ ok: false, message: "Internal Server Error" });
   }
 };

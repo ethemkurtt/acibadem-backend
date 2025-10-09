@@ -22,7 +22,7 @@ const TaleplerSchema = new mongoose.Schema(
     // Operasyonel
     arac: { type: mongoose.Schema.Types.ObjectId, ref: "Plaka", default: null },
     sofor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    atamaDurumu: { type: String, enum: ["Evet", "Hayır"], default: null },
+    atamaDurumu: { type: String, enum: ["Evet", "Hayır"], default: "Hayır" },
 
     transferTarihi: { type: Date, default: null },
     transferSaati: { type: String, default: "" },
