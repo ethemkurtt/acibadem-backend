@@ -85,6 +85,17 @@ exports.createCombined = async (req, res) => {
     const notifIn =
       srcDetay.notificationPerson || srcTalep.notificationPerson || null;
 
+    // --- İSTENEN: routes[0].pickup.date -> talepPayload.transferTarihi
+    if (
+      Array.isArray(routesIn) &&
+      routesIn.length > 0 &&
+      routesIn[0] &&
+      routesIn[0].pickup &&
+      routesIn[0].pickup.date
+    ) {
+      talepPayload.transferTarihi = routesIn[0].pickup.date;
+    }
+
     // 1) Talep oluştur
     const [talepDoc] = await Talepler.create([talepPayload], { session });
 
@@ -140,7 +151,7 @@ exports.createCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // İstersen response'ta sadeleştirilmiş “resolved” alanları da dönebilirsin
+    // Sadeleştirilmiş response
     res.status(201).json({
       talep: talepDoc,
       detay: detayDoc,
@@ -148,14 +159,13 @@ exports.createCombined = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    res
-      .status(400)
-      .json({
-        message: "Birleştirilmiş oluşturma başarısız",
-        error: err.message,
-      });
+    res.status(400).json({
+      message: "Birleştirilmiş oluşturma başarısız",
+      error: err.message,
+    });
   }
 };
+
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
