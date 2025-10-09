@@ -1,7 +1,7 @@
 const XLSX = require("xlsx");
 const path = require("path");
 const Lokasyon = require("../models/lokasyon.model");
-
+const mongoose = require("mongoose");
 exports.importLokasyonlar = async (req, res) => {
   try {
     const filePath = path.join(__dirname, "../excels/Ulaşım Uygulama Bigileri Güncel.xlsx");
