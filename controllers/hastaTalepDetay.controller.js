@@ -53,6 +53,11 @@ exports.createCombined = async (req, res) => {
     // requestType'ı garanti altına al
     talepPayload.requestType = "hasta";
 
+    // atamaDurumu gelmezse/null ise "Hayır"
+    if (talepPayload.atamaDurumu == null) {
+      talepPayload.atamaDurumu = "Hayır";
+    }
+
     // --- Hasta tip-özel alanlar
     const hastaFields = [
       "bolge",
@@ -77,23 +82,49 @@ exports.createCombined = async (req, res) => {
       : Array.isArray(srcTalep.companions)
       ? srcTalep.companions
       : [];
+
     const routesIn = Array.isArray(srcDetay.routes)
       ? srcDetay.routes
       : Array.isArray(srcTalep.routes)
       ? srcTalep.routes
       : [];
+
     const notifIn =
       srcDetay.notificationPerson || srcTalep.notificationPerson || null;
 
-    // --- İSTENEN: routes[0].pickup.date -> talepPayload.transferTarihi
-    if (
-      Array.isArray(routesIn) &&
-      routesIn.length > 0 &&
-      routesIn[0] &&
-      routesIn[0].pickup &&
-      routesIn[0].pickup.date
-    ) {
-      talepPayload.transferTarihi = routesIn[0].pickup.date;
+    // --- routes[0] içinden pickup tarihi -> transferTarihi
+    // Farklı alan adlarına toleranslı bir yakalama:
+    const getFirstPickupDate = (routes) => {
+      if (!Array.isArray(routes) || routes.length === 0) return null;
+      const r0 = routes[0] || {};
+      const p =
+        r0.pickup || r0.pickUp || r0.gidis || r0.from || {}; // olası alternatif anahtarlar
+
+      const candidates = [
+        p.date,
+        p.tarih,
+        p.datetime,
+        p.dateTime,
+        r0.pickupDate,
+        r0.date,
+        r0.tarih,
+      ].filter((v) => v != null);
+
+      return candidates.length ? candidates[0] : null;
+    };
+
+    const normalizeToDateIfPossible = (val) => {
+      if (val instanceof Date) return val;
+      // ISO/string gelirse Date'e çevirmeyi dene
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const pickupDateRaw = getFirstPickupDate(routesIn);
+    if (pickupDateRaw != null) {
+      // Şema Date bekliyorsa Date'e çevir; başarısız olursa raw değeri yaz
+      talepPayload.transferTarihi =
+        normalizeToDateIfPossible(pickupDateRaw) ?? pickupDateRaw;
     }
 
     // 1) Talep oluştur
@@ -115,8 +146,8 @@ exports.createCombined = async (req, res) => {
     if (routesIn.length) {
       const routeDocs = routesIn.map((r) => ({
         talep_id: talepDoc._id,
-        pickup: r.pickup || {},
-        drop: r.drop || {},
+        pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
+        drop: r.drop || r.to || {},
       }));
       const inserted = await Routes.insertMany(routeDocs, { session });
       routeIds = inserted.map((x) => x._id);
@@ -151,7 +182,6 @@ exports.createCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // Sadeleştirilmiş response
     res.status(201).json({
       talep: talepDoc,
       detay: detayDoc,
@@ -165,6 +195,7 @@ exports.createCombined = async (req, res) => {
     });
   }
 };
+
 
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
