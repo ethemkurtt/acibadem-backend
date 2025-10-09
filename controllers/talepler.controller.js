@@ -39,6 +39,12 @@ const userSelectExclude =
 exports.create = async (req, res) => {
   try {
     const body = req.body || {};
+
+    // Eğer atamaDurumu yoksa veya null ise "Hayır" olarak ayarla
+    if (body.atamaDurumu == null) {
+      body.atamaDurumu = "Hayır";
+    }
+
     const doc = await Talepler.create(body);
     res.status(201).json(doc);
   } catch (err) {
