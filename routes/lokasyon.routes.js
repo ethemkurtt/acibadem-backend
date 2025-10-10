@@ -18,6 +18,6 @@ router.post("/import", importLokasyonlar);
 router.get("/", getAllLokasyonlar);
 router.get("/:id", getLokasyonById);
 router.delete("/", deleteAllLokasyonlar);
-router.patch("/:id", patchLokasyon);
+router.put("/:id", patchLokasyon);
 
 module.exports = router;
