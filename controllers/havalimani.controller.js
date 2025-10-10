@@ -1,8 +1,7 @@
 // controllers/havalimani.controller.js
 const XLSX = require("xlsx");
 const path = require("path");
-const Havalimani = require("../models/Havalimani"); // modele göre düzelttim
-
+const Havalimani = require("../models/havalimanı/havalimani.model");
 // Küçük yardımcılar
 const str = (v) => (v === null || v === undefined ? "" : String(v)).trim();
 
