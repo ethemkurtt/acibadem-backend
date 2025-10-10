@@ -70,8 +70,13 @@ exports.getOneHavalimani = async (req, res) => {
 // 🟢 Yeni havalimanı ekle
 exports.createHavalimani = async (req, res) => {
   try {
-    const { adi, sehir } = req.body;
-    const newRecord = await Havalimani.create({ adi, sehir });
+    const { adi, il_kodu, ilce_kodu } = req.body;
+
+    const newRecord = await Havalimani.create({
+      adi,
+      il_kodu,
+      ilce_kodu
+    });
 
     return res.status(201).json({
       message: "Havalimanı başarıyla oluşturuldu",
