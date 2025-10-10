@@ -4,8 +4,8 @@ const mongoose = require("mongoose");
 const havalimaniSchema = new mongoose.Schema({
   adi: { type: String, required: true },
 
-  il_kodu:   { type: string,default:"" }, // örn: 34
-  ilce_kodu: { type: string,default:""}           // örn: "İstanbul"
+  il_kodu:   { type: String,default:"" }, // örn: 34
+  ilce_kodu: { type: String,default:""}           // örn: "İstanbul"
 }, { timestamps: true });
 
 
