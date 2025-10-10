@@ -126,7 +126,8 @@ exports.patchLokasyon = async (req, res) => {
 // 🟢 Lokasyon oluştur
 exports.createLokasyon = async (req, res) => {
   try {
-    const { ad } = req.body;
+    const { ad, il_kodu = "", ilce_kodu = "" } = req.body;
+
     if (!ad || ad.trim() === "") {
       return res.status(400).json({
         message: "Lokasyon adı gereklidir.",
@@ -134,7 +135,13 @@ exports.createLokasyon = async (req, res) => {
       });
     }
 
-    const yeniLokasyon = await Lokasyon.create({ ad: ad.trim() });
+    // İsteğin gönderdiği alanları kayda geç
+    const yeniLokasyon = await Lokasyon.create({
+      ad: ad.trim(),
+      il_kodu: String(il_kodu),
+      ilce_kodu: String(ilce_kodu)
+    });
+
     return res.status(201).json({
       message: "Lokasyon başarıyla oluşturuldu",
       data: yeniLokasyon
@@ -152,6 +159,7 @@ exports.createLokasyon = async (req, res) => {
     });
   }
 };
+
 
 // 🟢 ID ile lokasyon getir
 exports.getLokasyonById = async (req, res) => {
