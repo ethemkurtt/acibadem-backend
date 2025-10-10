@@ -1,6 +1,7 @@
 // controllers/talepler.controller.js
 const mongoose = require("mongoose");
 const Talepler = require("../models/talepler/talepler.model");
+const { Types: { ObjectId } } = require("mongoose");
 
 // Tip-özel detay modelleri
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
@@ -253,7 +254,6 @@ exports.getFullById = async (req, res) => {
   }
 };
 
-// const { Types: { ObjectId } } = require("mongoose");
 
 exports.aracTalep = async (req, res) => {
   try {
