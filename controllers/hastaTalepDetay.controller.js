@@ -93,12 +93,11 @@ exports.createCombined = async (req, res) => {
       srcDetay.notificationPerson || srcTalep.notificationPerson || null;
 
     // --- routes[0] içinden pickup tarihi -> transferTarihi
-    // Farklı alan adlarına toleranslı bir yakalama:
     const getFirstPickupDate = (routes) => {
       if (!Array.isArray(routes) || routes.length === 0) return null;
       const r0 = routes[0] || {};
       const p =
-        r0.pickup || r0.pickUp || r0.gidis || r0.from || {}; // olası alternatif anahtarlar
+        r0.pickup || r0.pickUp || r0.gidis || r0.from || {};
 
       const candidates = [
         p.date,
@@ -115,14 +114,12 @@ exports.createCombined = async (req, res) => {
 
     const normalizeToDateIfPossible = (val) => {
       if (val instanceof Date) return val;
-      // ISO/string gelirse Date'e çevirmeyi dene
       const d = new Date(val);
       return isNaN(d.getTime()) ? null : d;
     };
 
     const pickupDateRaw = getFirstPickupDate(routesIn);
     if (pickupDateRaw != null) {
-      // Şema Date bekliyorsa Date'e çevir; başarısız olursa raw değeri yaz
       talepPayload.transferTarihi =
         normalizeToDateIfPossible(pickupDateRaw) ?? pickupDateRaw;
     }
@@ -182,16 +179,19 @@ exports.createCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    res.status(201).json({
-      talep: talepDoc,
-      detay: detayDoc,
+    return res.status(201).json({
+      message: "Hasta talep ve detay başarıyla oluşturuldu",
+      data: {
+        talep: talepDoc,
+        detay: detayDoc,
+      },
     });
   } catch (err) {
-    await session.abortTransaction();
+    await session.abortTransaction().catch(() => {});
     session.endSession();
-    res.status(400).json({
+    return res.status(400).json({
       message: "Birleştirilmiş oluşturma başarısız",
-      error: err.message,
+      data: { error: err.message },
     });
   }
 };
@@ -263,15 +263,30 @@ exports.updateCombined = async (req, res) => {
   try {
     const { talepId } = req.params;
     if (!isId(talepId)) {
-      await session.endSession(); // guard
-      return res.status(400).json({ ok: false, message: "Geçersiz talepId" });
+      session.endSession();
+      return res.status(400).json({
+        message: "Geçersiz talepId",
+        data: null,
+      });
     }
 
-    // Talep gerçekten 'hasta' mı?
+    // Talep gerçekten var mı ve 'hasta' mı?
     const existingTalep = await Talepler.findById(talepId).session(session);
-    if (!existingTalep) throw new Error("Talep bulunamadı");
+    if (!existingTalep) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(404).json({
+        message: "Talep bulunamadı",
+        data: null,
+      });
+    }
     if (existingTalep.requestType && existingTalep.requestType !== "hasta") {
-      throw new Error("Talep tipi 'hasta' değil");
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(400).json({
+        message: "Talep tipi 'hasta' değil",
+        data: null,
+      });
     }
 
     const body = req.body || {};
@@ -300,6 +315,7 @@ exports.updateCombined = async (req, res) => {
       "description",
     ];
     const talepSet = pick(srcTalep, talepKeys);
+
     let talepDoc = existingTalep;
     if (Object.keys(talepSet).length) {
       talepDoc = await Talepler.findByIdAndUpdate(
@@ -338,9 +354,9 @@ exports.updateCombined = async (req, res) => {
       session
     );
 
-    if (newCompanionIds !== null) setDetay.companions = newCompanionIds; // null değilse güncelle
+    if (newCompanionIds !== null) setDetay.companions = newCompanionIds;
     if (newRouteIds !== null) setDetay.routes = newRouteIds;
-    if (newNotifId !== undefined) setDetay.notificationPerson = newNotifId; // undefined ise dokunma
+    if (newNotifId !== undefined) setDetay.notificationPerson = newNotifId;
 
     const detayDoc = await HastaDetay.findOneAndUpdate(
       { talep_id: talepId },
@@ -351,7 +367,7 @@ exports.updateCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // 3) Dönüşte, **tam populate** edilmiş birleşik obje verelim
+    // 3) Dönüşte, **populate** edilmiş birleşik obje verelim
     const populatedTalep = await Talepler.findById(talepId)
       .populate([
         { path: "lokasyon" },
@@ -377,16 +393,16 @@ exports.updateCombined = async (req, res) => {
 
     const populatedDetay = await HastaDetay.findOne({ talep_id: talepId })
       .populate([
-        { path: "companions" }, // 🔹 tüm companion alanları
-        { path: "routes" }, // 🔹 tüm route alanları (pickup/drop dahil)
-        { path: "notificationPerson" }, // 🔹 tüm notification alanları
+        { path: "companions" },
+        { path: "routes" },
+        { path: "notificationPerson" },
         { path: "bolge" },
         { path: "country" },
       ])
       .lean();
 
     return res.json({
-      ok: true,
+      message: "Hasta talep ve detay başarıyla güncellendi",
       data: {
         talep: populatedTalep,
         detay: populatedDetay || null,
@@ -395,12 +411,9 @@ exports.updateCombined = async (req, res) => {
   } catch (err) {
     await session.abortTransaction().catch(() => {});
     session.endSession();
-    return res
-      .status(400)
-      .json({
-        ok: false,
-        message: "Hasta talep güncellenemedi",
-        error: err.message,
-      });
+    return res.status(400).json({
+      message: "Hasta talep güncellenemedi",
+      data: { error: err.message },
+    });
   }
 };

@@ -6,8 +6,8 @@ const hastaneSchema = new mongoose.Schema({
   adres: { type: String, required: true },
 
   // Şehir bilgileri
-  il_kodu:   { type: String,default:"" }, // örn: 34
-  ilce_kodu: { type: String,default:""}           // örn: "İstanbul"
+  il_kodu:   { type: String,default:"" },
+  ilce_kodu: { type: String,default:""}      
 }, { timestamps: true });
 
 
