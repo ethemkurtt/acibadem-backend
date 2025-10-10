@@ -34,7 +34,8 @@ const TaleplerSchema = new mongoose.Schema(
     talepDurumu: {
       type: String,
       enum: ["Bekliyor", "Onaylandı", "İptal"],
-      default: null,
+      default: "Bekliyor",
+      set: (v) => (v == null ? "Bekliyor" : v),
     },
 
     talepEdenId: {
