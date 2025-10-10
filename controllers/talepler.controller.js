@@ -252,3 +252,113 @@ exports.getFullById = async (req, res) => {
       .json({ ok: false, message: "Internal Server Error" });
   }
 };
+
+// const { Types: { ObjectId } } = require("mongoose");
+
+exports.aracTalep = async (req, res) => {
+  try {
+    const {
+      requestType,
+      sofor,
+      lokasyon,          // opsiyonel: tekil lokasyon filtresi
+      // atamaDurumu,    // dışarıdan gelse bile sadece "Hayır" döndüreceğiz
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    // ---- Kullanıcının lokasyonlarını topla (senin verdiğin örnekle birebir mantık) ----
+    const user = req.user || {};
+    let userLokasyonIds = [];
+
+    if (req.lokasyonId) {
+      userLokasyonIds.push(new ObjectId(req.lokasyonId.toString()));
+    }
+    if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
+      userLokasyonIds.push(
+        ...user.lokasyonlar.filter(Boolean).map(l => new ObjectId(l.toString()))
+      );
+    }
+    if (user.lokasyon) {
+      userLokasyonIds.push(new ObjectId(user.lokasyon.toString()));
+    }
+
+    // Duplicate temizle
+    userLokasyonIds = [...new Set(userLokasyonIds.map(id => id.toString()))].map(id => new ObjectId(id));
+
+    if (!userLokasyonIds.length) {
+      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+    }
+
+    // ---- Ana filtre nesnesi ----
+    const q = {};
+
+    // Zorunlu filtreler:
+    q.atamaDurumu = "Hayır"; // sadece Hayır olanlar
+
+    // Tarih filtresi: geçmişi gösterme
+    const now = new Date();
+    let lowerBound = now; // alt sınır daima 'şu an'
+
+    // startDate/endDate varsa, alt sınırı max(now, startDate) yap
+    if (startDate) {
+      const start = new Date(`${startDate}T00:00:00.000Z`);
+      if (start > lowerBound) lowerBound = start;
+    }
+
+    const range = {};
+    range.$gte = lowerBound;
+    if (endDate) {
+      const end = new Date(`${endDate}T23:59:59.999Z`);
+      range.$lte = end;
+    }
+    q.transferTarihi = range;
+
+    // Diğer filtreler:
+    if (requestType) q.requestType = requestType;
+    if (sofor && isId(sofor)) q.sofor = sofor;
+
+    // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
+    if (lokasyon && isId(lokasyon)) {
+      const lokId = new ObjectId(lokasyon);
+      const isAllowed = userLokasyonIds.some(u => u.equals(lokId));
+      // yetkili değilse boş sonuç dönmek yerine 403 istiyorsan burayı değiştir
+      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000"); // eşleşme olmayacak
+    } else {
+      q.lokasyon = { $in: userLokasyonIds };
+    }
+
+    // Sayfalama
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sorgu + toplam sayım (aynı populate ve sort korunur)
+    const [items, total] = await Promise.all([
+      Talepler.find(q)
+        .sort({ transferTarihi: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate([
+          { path: "lokasyon" },
+          { path: "sofor", select: userSelectExclude },
+          { path: "arac" },
+          { path: "talepEdenId", select: userSelectExclude },
+          { path: "atamaYapanId", select: userSelectExclude },
+          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
+        ]),
+      Talepler.countDocuments(q),
+    ]);
+
+    // Yanıt (ŞEMA DEĞİŞMEDİ)
+    res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+      filters: { startDate, endDate },
+    });
+  } catch (err) {
+    console.error("❌ aracTalep listesi alınamadı:", err);
+    res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+  }
+};
