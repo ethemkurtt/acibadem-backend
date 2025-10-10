@@ -29,86 +29,210 @@ exports.importFromJson = async (req, res) => {
       }
     }
 
-    res.json({
+    return res.json({
       message: "JSON'dan veri başarıyla aktarıldı",
-      addedRegions,
-      addedCountries
+      data: { addedRegions, addedCountries }
     });
   } catch (err) {
-    res.status(500).json({ message: "İçe aktarma hatası", error: err.message });
+    return res.status(500).json({
+      message: "İçe aktarma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 ///////////////////// 📌 BÖLGELER CRUD /////////////////////
 
 exports.getBolgeler = async (req, res) => {
-  const data = await Bolge.find().sort({ ad: 1 });
-  res.json(data);
+  try {
+    const bolgeler = await Bolge.find().sort({ ad: 1 });
+    return res.json({
+      message: "Bölgeler başarıyla getirildi",
+      data: bolgeler
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Veri getirme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
 exports.createBolge = async (req, res) => {
   try {
     const bolge = await Bolge.create({ ad: req.body.ad });
-    res.status(201).json(bolge);
+    return res.status(201).json({
+      message: "Bölge başarıyla oluşturuldu",
+      data: bolge
+    });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    return res.status(400).json({
+      message: "Oluşturma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.updateBolge = async (req, res) => {
   try {
-    const bolge = await Bolge.findByIdAndUpdate(req.params.id, { ad: req.body.ad }, { new: true });
-    if (!bolge) return res.status(404).json({ message: "Bölge bulunamadı" });
-    res.json(bolge);
+    const bolge = await Bolge.findByIdAndUpdate(
+      req.params.id,
+      { ad: req.body.ad },
+      { new: true, runValidators: true }
+    );
+
+    if (!bolge) {
+      return res.status(404).json({
+        message: "Bölge bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Bölge başarıyla güncellendi",
+      data: bolge
+    });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    return res.status(400).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.deleteBolge = async (req, res) => {
-  const bolge = await Bolge.findByIdAndDelete(req.params.id);
-  if (!bolge) return res.status(404).json({ message: "Bölge bulunamadı" });
-  await Ulke.deleteMany({ bolgeId: bolge._id });
-  res.json({ message: "Bölge ve bağlı ülkeler silindi" });
+  try {
+    const bolge = await Bolge.findByIdAndDelete(req.params.id);
+    if (!bolge) {
+      return res.status(404).json({
+        message: "Bölge bulunamadı",
+        data: null
+      });
+    }
+
+    const countriesResult = await Ulke.deleteMany({ bolgeId: bolge._id });
+
+    return res.json({
+      message: "Bölge ve bağlı ülkeler başarıyla silindi",
+      data: {
+        deletedBolgeId: bolge._id,
+        deletedCountries: countriesResult.deletedCount || 0
+      }
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Silme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
 ///////////////////// 📌 ÜLKELER CRUD /////////////////////
 
 exports.getUlkeler = async (req, res) => {
-  const filter = req.query.bolgeId ? { bolgeId: req.query.bolgeId } : {};
-  const data = await Ulke.find(filter).populate("bolgeId", "ad").sort({ ad: 1 });
-  res.json(data);
+  try {
+    const filter = req.query.bolgeId ? { bolgeId: req.query.bolgeId } : {};
+    const ulkeler = await Ulke.find(filter)
+      .populate("bolgeId", "ad")
+      .sort({ ad: 1 });
+
+    return res.json({
+      message: "Ülkeler başarıyla getirildi",
+      data: ulkeler
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Veri getirme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
 exports.getUlkeById = async (req, res) => {
-  const data = await Ulke.findById(req.params.id).populate("bolgeId", "ad");
-  if (!data) return res.status(404).json({ message: "Ülke bulunamadı" });
-  res.json(data);
+  try {
+    const ulke = await Ulke.findById(req.params.id).populate("bolgeId", "ad");
+    if (!ulke) {
+      return res.status(404).json({
+        message: "Ülke bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Ülke başarıyla getirildi",
+      data: ulke
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Veri getirme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
 exports.createUlke = async (req, res) => {
   try {
     const { ad, bolgeId } = req.body;
     const ulke = await Ulke.create({ ad, bolgeId });
-    res.status(201).json(ulke);
+
+    return res.status(201).json({
+      message: "Ülke başarıyla oluşturuldu",
+      data: ulke
+    });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    return res.status(400).json({
+      message: "Oluşturma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.updateUlke = async (req, res) => {
   try {
     const { ad, bolgeId } = req.body;
-    const ulke = await Ulke.findByIdAndUpdate(req.params.id, { ad, bolgeId }, { new: true });
-    if (!ulke) return res.status(404).json({ message: "Ülke bulunamadı" });
-    res.json(ulke);
+    const ulke = await Ulke.findByIdAndUpdate(
+      req.params.id,
+      { ad, bolgeId },
+      { new: true, runValidators: true }
+    );
+
+    if (!ulke) {
+      return res.status(404).json({
+        message: "Ülke bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Ülke başarıyla güncellendi",
+      data: ulke
+    });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    return res.status(400).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.deleteUlke = async (req, res) => {
-  const ulke = await Ulke.findByIdAndDelete(req.params.id);
-  if (!ulke) return res.status(404).json({ message: "Ülke bulunamadı" });
-  res.json({ message: "Ülke silindi" });
+  try {
+    const ulke = await Ulke.findByIdAndDelete(req.params.id);
+    if (!ulke) {
+      return res.status(404).json({
+        message: "Ülke bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Ülke başarıyla silindi",
+      data: ulke
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Silme hatası",
+      data: { error: err.message }
+    });
+  }
 };

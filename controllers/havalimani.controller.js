@@ -2,7 +2,7 @@ const XLSX = require("xlsx");
 const path = require("path");
 const Havalimani = require("../models/havalimanı/havalimani.model");
 
-// 🟢 Excel dosyasından toplu veri yükleme
+// 🟢 Excel'den toplu veri yükleme
 exports.importHavalimanlari = async (req, res) => {
   try {
     const filePath = path.join(__dirname, "../excels/Ulaşım Uygulama Bigileri Güncel.xlsx");
@@ -16,33 +16,54 @@ exports.importHavalimanlari = async (req, res) => {
     }));
 
     const inserted = await Havalimani.insertMany(mapped);
-    res.json({
+
+    return res.json({
       message: "Havalimanları başarıyla yüklendi",
-      count: inserted.length,
+      data: { count: inserted.length }
     });
   } catch (err) {
-    res.status(500).json({ message: "İçe aktarma hatası", error: err.message });
+    return res.status(500).json({
+      message: "İçe aktarma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 // 🟢 Tüm havalimanlarını getir
 exports.getAllHavalimanlari = async (req, res) => {
   try {
-    const data = await Havalimani.find().sort({ adi: 1 });
-    res.json(data);
+    const havalimanlari = await Havalimani.find().sort({ adi: 1 });
+    return res.json({
+      message: "Havalimanları başarıyla getirildi",
+      data: havalimanlari
+    });
   } catch (err) {
-    res.status(500).json({ message: "Listeleme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Listeleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 // 🟢 Tek havalimanı getir
 exports.getOneHavalimani = async (req, res) => {
   try {
-    const data = await Havalimani.findById(req.params.id);
-    if (!data) return res.status(404).json({ message: "Kayıt bulunamadı" });
-    res.json(data);
+    const havalimani = await Havalimani.findById(req.params.id);
+    if (!havalimani) {
+      return res.status(404).json({
+        message: "Havalimanı bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Havalimanı başarıyla getirildi",
+      data: havalimani
+    });
   } catch (err) {
-    res.status(500).json({ message: "Getirme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Getirme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -51,9 +72,16 @@ exports.createHavalimani = async (req, res) => {
   try {
     const { adi, sehir } = req.body;
     const newRecord = await Havalimani.create({ adi, sehir });
-    res.status(201).json(newRecord);
+
+    return res.status(201).json({
+      message: "Havalimanı başarıyla oluşturuldu",
+      data: newRecord
+    });
   } catch (err) {
-    res.status(500).json({ message: "Kayıt hatası", error: err.message });
+    return res.status(400).json({
+      message: "Kayıt hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -64,14 +92,25 @@ exports.updateHavalimani = async (req, res) => {
     const updated = await Havalimani.findByIdAndUpdate(
       req.params.id,
       { adi, sehir },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
-    if (!updated) return res.status(404).json({ message: "Güncellenecek kayıt bulunamadı" });
+    if (!updated) {
+      return res.status(404).json({
+        message: "Havalimanı bulunamadı",
+        data: null
+      });
+    }
 
-    res.json(updated);
+    return res.json({
+      message: "Havalimanı başarıyla güncellendi",
+      data: updated
+    });
   } catch (err) {
-    res.status(500).json({ message: "Güncelleme hatası", error: err.message });
+    return res.status(400).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -79,11 +118,22 @@ exports.updateHavalimani = async (req, res) => {
 exports.deleteHavalimani = async (req, res) => {
   try {
     const deleted = await Havalimani.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Silinecek kayıt bulunamadı" });
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Havalimanı bulunamadı",
+        data: null
+      });
+    }
 
-    res.json({ message: "Havalimanı silindi", id: deleted._id });
+    return res.json({
+      message: "Havalimanı başarıyla silindi",
+      data: deleted
+    });
   } catch (err) {
-    res.status(500).json({ message: "Silme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Silme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -91,11 +141,14 @@ exports.deleteHavalimani = async (req, res) => {
 exports.deleteAllHavalimanlari = async (req, res) => {
   try {
     const result = await Havalimani.deleteMany({});
-    res.json({
+    return res.json({
       message: "Tüm havalimanları silindi",
-      deletedCount: result.deletedCount,
+      data: { deletedCount: result.deletedCount }
     });
   } catch (err) {
-    res.status(500).json({ message: "Toplu silme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Toplu silme hatası",
+      data: { error: err.message }
+    });
   }
 };

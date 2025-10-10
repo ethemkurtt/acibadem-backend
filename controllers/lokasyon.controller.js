@@ -2,6 +2,8 @@ const XLSX = require("xlsx");
 const path = require("path");
 const Lokasyon = require("../models/lokasyon.model");
 const mongoose = require("mongoose");
+
+// 🟢 Excel'den toplu lokasyon yükleme
 exports.importLokasyonlar = async (req, res) => {
   try {
     const filePath = path.join(__dirname, "../excels/Ulaşım Uygulama Bigileri Güncel.xlsx");
@@ -9,7 +11,6 @@ exports.importLokasyonlar = async (req, res) => {
     const sheet = workbook.Sheets["OTEL ADRESLERİ"];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-    // Şehir için olası kolon adları (varsa alır, yoksa yok sayar)
     const pick = (row, keys) => {
       for (const k of keys) {
         if (row[k] !== undefined && String(row[k]).trim() !== "") return String(row[k]).trim();
@@ -19,21 +20,15 @@ exports.importLokasyonlar = async (req, res) => {
     const CITY_NAME_KEYS = ["İL", "IL", "ŞEHİR", "SEHIR", "İL ADI", "IL ADI", "CITY"];
     const CITY_ID_KEYS   = ["İL KODU", "PLAKA", "PLAKA KODU", "IL KODU", "SEHIR KODU"];
 
-    // Tüm lokasyonları çek ve tekrarsız hale getir (mevcut davranış korunur)
     const lokasyonSet = new Set();
     rows.forEach(row => {
-      if (row["LOKASYON"]) {
-        lokasyonSet.add(row["LOKASYON"].trim());
-      }
+      if (row["LOKASYON"]) lokasyonSet.add(String(row["LOKASYON"]).trim());
     });
 
-    // Opsiyonel şehir bilgisini de ekle (Excel'de varsa)
     const lokasyonArray = [];
     rows.forEach(row => {
       const ad = row["LOKASYON"] ? String(row["LOKASYON"]).trim() : "";
-      if (!ad || !lokasyonSet.has(ad)) return; // ad set’ine göre tekilleştirme
-
-      // set'ten bir kez tüketelim ki tekrarı eklemeyelim
+      if (!ad || !lokasyonSet.has(ad)) return;
       lokasyonSet.delete(ad);
 
       const sehirName = pick(row, CITY_NAME_KEYS);
@@ -42,7 +37,7 @@ exports.importLokasyonlar = async (req, res) => {
       const sehirId = Number.isNaN(sehirIdNum) ? undefined : sehirIdNum;
 
       const doc = { ad };
-      if (sehirName) doc.sehirName = sehirName; // modelde opsiyonelse sorun olmaz
+      if (sehirName) doc.sehirName = sehirName;
       if (sehirId)   doc.sehirId = sehirId;
 
       lokasyonArray.push(doc);
@@ -50,72 +45,142 @@ exports.importLokasyonlar = async (req, res) => {
 
     const result = await Lokasyon.insertMany(lokasyonArray, { ordered: false });
 
-    res.json({ message: "Lokasyonlar başarıyla yüklendi", count: result.length });
+    return res.json({
+      message: "Lokasyonlar başarıyla yüklendi",
+      data: { count: result.length }
+    });
   } catch (err) {
-    if (err.code === 11000) {
-      res.status(409).json({ message: "Bazı lokasyonlar zaten kayıtlı", error: err.message });
-    } else {
-      res.status(500).json({ message: "İçe aktarma hatası", error: err.message });
+    if (err?.code === 11000) {
+      return res.status(409).json({
+        message: "Bazı lokasyonlar zaten kayıtlı",
+        data: { error: err.message }
+      });
     }
+    return res.status(500).json({
+      message: "İçe aktarma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
+// 🟢 Tüm lokasyonları getir
 exports.getAllLokasyonlar = async (req, res) => {
-  const data = await Lokasyon.find().sort({ ad: 1 });
-  res.json(data);
+  try {
+    const lokasyonlar = await Lokasyon.find().sort({ ad: 1 });
+    return res.json({
+      message: "Lokasyonlar başarıyla getirildi",
+      data: lokasyonlar
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Listeleme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
+// 🟢 Tüm lokasyonları sil
 exports.deleteAllLokasyonlar = async (req, res) => {
-  const result = await Lokasyon.deleteMany({});
-  res.json({ message: "Tüm lokasyonlar silindi", deletedCount: result.deletedCount });
+  try {
+    const result = await Lokasyon.deleteMany({});
+    return res.json({
+      message: "Tüm lokasyonlar silindi",
+      data: { deletedCount: result.deletedCount }
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Toplu silme hatası",
+      data: { error: err.message }
+    });
+  }
 };
+
+// 🟢 Kısmi güncelle (PATCH)
 exports.patchLokasyon = async (req, res) => {
   try {
     const updated = await Lokasyon.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },           // sadece gönderdiğini değiştirir
+      { $set: req.body },
       { new: true, runValidators: true }
     );
-    if (!updated) return res.status(404).json({ message: "Lokasyon bulunamadı" });
-    res.json(updated);
+
+    if (!updated) {
+      return res.status(404).json({
+        message: "Lokasyon bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Lokasyon başarıyla güncellendi",
+      data: updated
+    });
   } catch (err) {
-    res.status(400).json({ message: "Kısmi güncelleme hatası", error: err.message });
+    return res.status(400).json({
+      message: "Kısmi güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
+
+// 🟢 Lokasyon oluştur
 exports.createLokasyon = async (req, res) => {
   try {
     const { ad } = req.body;
     if (!ad || ad.trim() === "") {
-      return res.status(400).json({ message: "Lokasyon adı gereklidir." });
+      return res.status(400).json({
+        message: "Lokasyon adı gereklidir.",
+        data: null
+      });
     }
 
     const yeniLokasyon = await Lokasyon.create({ ad: ad.trim() });
-    res.status(201).json(yeniLokasyon);
+    return res.status(201).json({
+      message: "Lokasyon başarıyla oluşturuldu",
+      data: yeniLokasyon
+    });
   } catch (err) {
     if (err?.code === 11000) {
-      return res.status(409).json({ message: "Bu lokasyon zaten kayıtlı." });
+      return res.status(409).json({
+        message: "Bu lokasyon zaten kayıtlı.",
+        data: { error: err.message }
+      });
     }
-    res.status(500).json({ message: "Lokasyon eklenemedi", error: err.message });
+    return res.status(500).json({
+      message: "Lokasyon eklenemedi",
+      data: { error: err.message }
+    });
   }
 };
 
-
+// 🟢 ID ile lokasyon getir
 exports.getLokasyonById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Geçersiz ObjectId kontrolü
     if (!mongoose.isValidObjectId(id)) {
-      return res.status(400).json({ message: "Geçersiz lokasyon ID formatı." });
+      return res.status(400).json({
+        message: "Geçersiz lokasyon ID formatı.",
+        data: null
+      });
     }
 
     const doc = await Lokasyon.findById(id);
     if (!doc) {
-      return res.status(404).json({ message: "Lokasyon bulunamadı" });
+      return res.status(404).json({
+        message: "Lokasyon bulunamadı",
+        data: null
+      });
     }
 
-    return res.json(doc);
+    return res.json({
+      message: "Lokasyon başarıyla getirildi",
+      data: doc
+    });
   } catch (err) {
-    return res.status(500).json({ message: "Lokasyon getirilemedi", error: err.message });
+    return res.status(500).json({
+      message: "Lokasyon getirilemedi",
+      data: { error: err.message }
+    });
   }
 };

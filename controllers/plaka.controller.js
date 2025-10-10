@@ -7,10 +7,16 @@ const Plaka = require("../models/Plaka");
 exports.create = async (req, res) => {
   try {
     const created = await Plaka.create(req.body);
-    res.status(201).json(created);
+    return res.status(201).json({
+      message: "Plaka başarıyla oluşturuldu",
+      data: created
+    });
   } catch (err) {
-    const status = err.code === 11000 ? 409 : 400;
-    res.status(status).json({ message: "Oluşturma hatası", error: err.message });
+    const status = err?.code === 11000 ? 409 : 400;
+    return res.status(status).json({
+      message: "Oluşturma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -35,24 +41,41 @@ exports.list = async (req, res) => {
       ];
     }
 
-    const data = await Plaka.find(filter)
+    const items = await Plaka.find(filter)
       .sort({ createdAt: -1 })
       .skip(Number(skip))
       .limit(Number(limit));
 
-    res.json(data);
+    return res.json({
+      message: "Plakalar başarıyla getirildi",
+      data: items
+    });
   } catch (err) {
-    res.status(500).json({ message: "Listeleme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Listeleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.getById = async (req, res) => {
   try {
     const item = await Plaka.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: "Plaka bulunamadı" });
-    res.json(item);
+    if (!item) {
+      return res.status(404).json({
+        message: "Plaka bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Plaka başarıyla getirildi",
+      data: item
+    });
   } catch (err) {
-    res.status(400).json({ message: "Getirme hatası", error: err.message });
+    return res.status(400).json({
+      message: "Getirme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -63,11 +86,22 @@ exports.update = async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     );
-    if (!updated) return res.status(404).json({ message: "Plaka bulunamadı" });
-    res.json(updated);
+    if (!updated) {
+      return res.status(404).json({
+        message: "Plaka bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Plaka başarıyla güncellendi",
+      data: updated
+    });
   } catch (err) {
-    const status = err.code === 11000 ? 409 : 400;
-    res.status(status).json({ message: "Güncelleme hatası", error: err.message });
+    const status = err?.code === 11000 ? 409 : 400;
+    return res.status(status).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
@@ -78,32 +112,59 @@ exports.patch = async (req, res) => {
       { $set: req.body },
       { new: true, runValidators: true }
     );
-    if (!updated) return res.status(404).json({ message: "Plaka bulunamadı" });
-    res.json(updated);
+    if (!updated) {
+      return res.status(404).json({
+        message: "Plaka bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Plaka başarıyla güncellendi",
+      data: updated
+    });
   } catch (err) {
-    const status = err.code === 11000 ? 409 : 400;
-    res.status(status).json({ message: "Kısmi güncelleme hatası", error: err.message });
+    const status = err?.code === 11000 ? 409 : 400;
+    return res.status(status).json({
+      message: "Kısmi güncelleme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
 exports.remove = async (req, res) => {
   try {
     const deleted = await Plaka.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Plaka bulunamadı" });
-    res.json({ message: "Silindi", deleted });
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Plaka bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Plaka başarıyla silindi",
+      data: deleted
+    });
   } catch (err) {
-    res.status(500).json({ message: "Silme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Silme hatası",
+      data: { error: err.message }
+    });
   }
 };
 
-
+// ---- Ekstra ----
 exports.getAktifAraclar = async (req, res) => {
   try {
     const araclar = await Plaka.find({ status: true })
       .select("plaka marka tip lokasyonId lokasyonAd");
-
-    res.json(araclar);
+    return res.json({
+      message: "Aktif araçlar başarıyla getirildi",
+      data: araclar
+    });
   } catch (err) {
-    res.status(500).json({ error: "Araç listesi alınamadı." });
+    return res.status(500).json({
+      message: "Araç listesi alınamadı",
+      data: { error: err.message }
+    });
   }
 };

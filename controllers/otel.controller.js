@@ -2,72 +2,146 @@ const Otel = require("../models/otel/otel.model");
 const XLSX = require("xlsx");
 const path = require("path");
 
+// 🟢 Excel'den toplu otel içe aktarma
 exports.importOtellerFromExcel = async (req, res) => {
   try {
-    // Excel dosyasını doğrudan path'ten oku
     const filePath = path.join(
       __dirname,
       "../excels/Ulaşım Uygulama Bigileri Güncel.xlsx"
     );
     const workbook = XLSX.readFile(filePath);
-    const sheet = workbook.Sheets["OTEL ADRESLERİ"]; // sekme adı
+    const sheet = workbook.Sheets["OTEL ADRESLERİ"];
 
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
     const mapped = rows.map((row) => ({
-      otelAdi: row["OTEL ADI"] || "",
-      lokasyon: row["LOKASYON"] || "",
-      rezervasyonEmail:
-        row["REZERVASYON MAİL ADRESİ"] || "",
-      yetkiliKisi: row["YETKİLİ KİŞİ"] || "",
-      yetkiliIletisim: row["YETKİLİ KİŞİ İLETİŞİM"] || "",
-      adres: row["OTEL AÇIK ADRES"] || "",
-      firmaUnvani: row["FİRMA UNVANI "] || "",
-      vergiDairesi: row["VERGİ DAİRESİ"] || "",
-      vergiNo: row["VERGİ NUMARASI"] || "",
+      otelAdi: (row["OTEL ADI"] || "").toString().trim(),
+      lokasyon: (row["LOKASYON"] || "").toString().trim(),
+      rezervasyonEmail: (row["REZERVASYON MAİL ADRESİ"] || "").toString().trim(),
+      yetkiliKisi: (row["YETKİLİ KİŞİ"] || "").toString().trim(),
+      yetkiliIletisim: (row["YETKİLİ KİŞİ İLETİŞİM"] || "").toString().trim(),
+      adres: (row["OTEL AÇIK ADRES"] || "").toString().trim(),
+      firmaUnvani: (row["FİRMA UNVANI "] || "").toString().trim(),
+      vergiDairesi: (row["VERGİ DAİRESİ"] || "").toString().trim(),
+      vergiNo: (row["VERGİ NUMARASI"] || "").toString().trim(),
     }));
 
-    const inserted = await Otel.insertMany(mapped);
-    res.json({
+    const inserted = await Otel.insertMany(mapped, { ordered: false });
+
+    return res.json({
       message: "Otel verileri başarıyla yüklendi",
-      count: inserted.length,
+      data: { count: inserted.length }
     });
   } catch (error) {
-    res.status(500).json({ message: "Hata oluştu", error: error.message });
+    const status = error?.code === 11000 ? 409 : 500;
+    const msg = error?.code === 11000 ? "Bazı oteller zaten kayıtlı" : "İçe aktarma hatası";
+    return res.status(status).json({
+      message: msg,
+      data: { error: error.message }
+    });
   }
 };
 
+// 🟢 Otel oluştur
 exports.createOtel = async (req, res) => {
   try {
     const otel = await Otel.create(req.body);
-    res.status(201).json(otel);
+    return res.status(201).json({
+      message: "Otel başarıyla oluşturuldu",
+      data: otel
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    const status = err?.code === 11000 ? 409 : 400;
+    return res.status(status).json({
+      message: "Otel oluşturma hatası",
+      data: { error: err.message }
+    });
   }
 };
 
+// 🟢 Tüm otelleri getir
 exports.getOteller = async (req, res) => {
-  const oteller = await Otel.find().sort({ createdAt: -1 });
-  res.json(oteller);
+  try {
+    const oteller = await Otel.find().sort({ createdAt: -1 });
+    return res.json({
+      message: "Oteller başarıyla getirildi",
+      data: oteller
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Listeleme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
+// 🟢 ID ile otel getir
 exports.getOtelById = async (req, res) => {
-  const otel = await Otel.findById(req.params.id);
-  if (!otel) return res.status(404).json({ message: "Otel bulunamadı" });
-  res.json(otel);
+  try {
+    const otel = await Otel.findById(req.params.id);
+    if (!otel) {
+      return res.status(404).json({
+        message: "Otel bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Otel başarıyla getirildi",
+      data: otel
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Getirme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
+// 🟢 Otel güncelle
 exports.updateOtel = async (req, res) => {
-  const updated = await Otel.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-  });
-  if (!updated)
-    return res.status(404).json({ message: "Güncelleme başarısız" });
-  res.json(updated);
+  try {
+    const updated = await Otel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!updated) {
+      return res.status(404).json({
+        message: "Otel bulunamadı",
+        data: null
+      });
+    }
+
+    return res.json({
+      message: "Otel başarıyla güncellendi",
+      data: updated
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message }
+    });
+  }
 };
 
+// 🟢 Otel sil
 exports.deleteOtel = async (req, res) => {
-  const deleted = await Otel.findByIdAndDelete(req.params.id);
-  if (!deleted) return res.status(404).json({ message: "Silme başarısız" });
-  res.json({ message: "Otel silindi" });
+  try {
+    const deleted = await Otel.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Otel bulunamadı",
+        data: null
+      });
+    }
+    return res.json({
+      message: "Otel başarıyla silindi",
+      data: deleted
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Silme hatası",
+      data: { error: err.message }
+    });
+  }
 };
