@@ -9,6 +9,7 @@ router.get("/detail/:id", ctrl.getFullById);   // <- YENİ
 router.post("/", ctrl.create);
 router.get("/", ctrl.list);
 router.get("/aracTalep", authRequired,ctrl.aracTalep);
+router.get("/aracIsEmri", authRequired,ctrl.aracIsEmri);
 router.get("/:id", ctrl.getById);
 
 router.put("/:id", ctrl.updateById);
