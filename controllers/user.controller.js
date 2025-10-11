@@ -1,8 +1,7 @@
 // controllers/user.controller.js
-// ... üst require'lar aynı
 const User = require("../models/user.model");
 
-// helper: Map/Mixed -> plain object
+// Map/Mixed/Map-like -> plain object
 function mapToPlain(objOrMap) {
   if (!objOrMap) return {};
   if (objOrMap instanceof Map) return Object.fromEntries(objOrMap);
@@ -10,20 +9,18 @@ function mapToPlain(objOrMap) {
   return {};
 }
 
-// helper: response builder (roleGroup + yetkiler dahil)
+// RoleGroup + yetkiler dahil user cevabı
 async function userResponse(user) {
   const RoleGroup = require("../models/roleGroup.model");
 
   // RoleGroup'u roleGroupId (string) ile bul
   const group = await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean();
 
-  // RoleGroup.yetkiler'i düz objeye çevir
+  // RoleGroup.yetkiler & User.yetkiler -> düz objeye çevir
   const groupYetkiler = group ? mapToPlain(group.yetkiler) : {};
+  const userYetkiler  = mapToPlain(user.yetkiler);
 
-  // Kullanıcı yetkilerini düz objeye çevir
-  const userYetkiler = mapToPlain(user.yetkiler);
-
-  // 🔑 Fallback: lokasyonlar boşsa tekil lokasyonu diziye çevir
+  // lokasyon fallback (tekil lokasyonu diziye çevir)
   const lokDocs = (user.lokasyonlar && user.lokasyonlar.length)
     ? user.lokasyonlar
     : (user.lokasyon ? [user.lokasyon] : []);
@@ -32,11 +29,13 @@ async function userResponse(user) {
     id: user._id,
     name: user.name,
     email: user.email,
+
     organizasyon: user.organizasyon || null,
     personelGrubu: user.personelGrubu || null,
     roleGroupId: user.roleGroupId,
     roleGroupName: group?.roleGroupName || null,
 
+    // profil
     tc: user.tc,
     telefon: user.telefon,
     mail: user.mail,
@@ -44,9 +43,11 @@ async function userResponse(user) {
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
 
+    // referanslar
     departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
 
+    // lokasyonlar
     lokasyonlar: lokDocs.map(l => l?._id ?? l).filter(Boolean),
     lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
 
@@ -55,10 +56,10 @@ async function userResponse(user) {
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
 
-    // 🔵 YENİ: Kullanıcının kendi yetkileri (Map -> plain)
+    // 🔵 Kullanıcının kendi yetkileri
     yetkiler: userYetkiler,
 
-    // 🔵 YENİ: RoleGroup bilgisi (roleGroupId ile) + grubun yetkileri
+    // 🔵 RoleGroup bilgisi (+ grup yetkileri)
     roleGroup: group ? {
       roleGroupId: group.roleGroupId,
       roleGroupName: group.roleGroupName,
@@ -88,16 +89,32 @@ exports.createUser = async (req, res) => {
 
     const finalLokasyonlar = Array.isArray(lokasyonlar)
       ? lokasyonlar
-      : (lokasyon ? [lokasyon] : []); // 🔑 tekil geldi ise diziye çevir
+      : (lokasyon ? [lokasyon] : []); // tekil geldiyse diziye çevir
 
     const newUser = new User({
-      name, email, password: hashedPassword, organizasyon, personelGrubu, roleGroupId,
-      tc: tc || null, departman: departman || null,
+      name,
+      email,
+      password: hashedPassword,
+      organizasyon,
+      personelGrubu,
+      roleGroupId,
+
+      tc: tc || null,
+      departman: departman || null,
+
       lokasyonlar: finalLokasyonlar,
-      lokasyon: lokasyon || null, // legacy alanı da set edelim istenirse
-      bolge: bolge || null, ulke: ulke || null, telefon: telefon || null, mail: mail || null,
-      dogumTarihi: dogumTarihi || null, cinsiyet: cinsiyet || null, ehliyet: ehliyet ?? false,
-      yetkiler: yetkiler || {} // <- kullanıcının kendi yetkileri
+      lokasyon: lokasyon || null, // legacy alan
+
+      bolge: bolge || null,
+      ulke: ulke || null,
+      telefon: telefon || null,
+      mail: mail || null,
+      dogumTarihi: dogumTarihi || null,
+      cinsiyet: cinsiyet || null,
+      ehliyet: ehliyet ?? false,
+
+      // serbest yetki alanı: ne gönderirsen aynen saklanır
+      yetkiler: yetkiler || {}
     });
 
     await newUser.save();
@@ -109,14 +126,15 @@ exports.createUser = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    res.status(201).json({ message: "Kullanıcı oluşturuldu.", user: await userResponse(populatedUser) });
+    res.status(201).json({
+      message: "Kullanıcı oluşturuldu.",
+      user: await userResponse(populatedUser)
+    });
   } catch (err) {
     console.error("createUser hatası:", err);
-
     if (err.code === 11000) {
       return res.status(409).json({ error: "Bu e-posta zaten kayıtlı." });
     }
-
     return res.status(500).json({
       error: "Kullanıcı oluşturulamadı.",
       details: err.message,
@@ -127,7 +145,7 @@ exports.createUser = async (req, res) => {
 };
 
 // ✅ Hepsini getir
-exports.getAllUsers = async (req, res) => {
+exports.getAllUsers = async (_req, res) => {
   try {
     const users = await User.find()
       .sort({ name: 1 })
@@ -137,8 +155,8 @@ exports.getAllUsers = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    const enrichedUsers = await Promise.all(users.map(user => userResponse(user)));
-    res.json(enrichedUsers);
+    const enriched = await Promise.all(users.map(u => userResponse(u)));
+    res.json(enriched);
   } catch (err) {
     console.error("getAllUsers hatası:", err);
     res.status(500).json({ error: "Kullanıcılar getirilemedi." });
@@ -163,64 +181,59 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+// ✅ Güncelle
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // 1) Giriş verisi
     const raw = { ...req.body };
 
-    // 2) Gereksiz/gölgeleyen alanları temizle
+    // gereksiz/gölgeleyen alanları temizle
     delete raw._token;
     delete raw.password;
     delete raw.password_confirmation;
 
-    // 3) Normalize (tip dönüşümleri)
-    if (raw.hasOwnProperty('ehliyet')) {
+    // tip normalize
+    if (raw.hasOwnProperty("ehliyet")) {
       const v = raw.ehliyet;
-      raw.ehliyet = v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || v === 'on';
+      raw.ehliyet =
+        v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true" || v === "on";
     }
     if (raw.dogumTarihi) {
       const d = new Date(raw.dogumTarihi);
       if (!isNaN(d.getTime())) raw.dogumTarihi = d;
-      else delete raw.dogumTarihi; // tarih parse edilemiyorsa update etme
+      else delete raw.dogumTarihi;
     }
 
-    // Tekil lokasyonu diziye yansıt (opsiyonel)
+    // tekil lokasyon -> dizi
     if (!raw.lokasyonlar && raw.lokasyon) {
       raw.lokasyonlar = [raw.lokasyon].filter(Boolean);
     }
 
-    // 4) Boş stringleri sil (bilerek null gönderilirse saklanır)
+    // boş stringleri sil (bilerek null gelirse saklarız)
     for (const [k, v] of Object.entries(raw)) {
-      if (v === '') delete raw[k];
+      if (v === "") delete raw[k];
     }
 
-    // 5) Update öncesi dokümanı çek
     const before = await User.findById(id).lean();
-    if (!before) {
-      return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
-    }
+    if (!before) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    // 6) $set ile güncelle
+    // $set
     const result = await User.updateOne({ _id: id }, { $set: raw }, { runValidators: true });
 
-    // 7) Update sonrası dokümanı çek
     const after = await User.findById(id)
-      .populate('departman', 'ad')
-      .populate('lokasyonlar', 'ad')
-      .populate('lokasyon', 'ad')
-      .populate('bolge', 'ad')
-      .populate('ulke', 'ad');
+      .populate("departman", "ad")
+      .populate("lokasyonlar", "ad")
+      .populate("lokasyon", "ad")
+      .populate("bolge", "ad")
+      .populate("ulke", "ad");
 
-    // 8) Diff (sadece gönderdiğin anahtarlar üzerinden)
     const diff = {};
     for (const k of Object.keys(raw)) {
       diff[k] = { from: before?.[k] ?? null, to: after?.[k] ?? null };
     }
 
     return res.json({
-      message: 'Güncelleme denemesi tamamlandı',
+      message: "Güncelleme denemesi tamamlandı",
       acknowledged: result.acknowledged,
       matchedCount: result.matchedCount,
       modifiedCount: result.modifiedCount,
@@ -229,25 +242,23 @@ exports.updateUser = async (req, res) => {
       user: await userResponse(after)
     });
   } catch (err) {
-    console.error('updateUser hatası:', err);
-    return res.status(500).json({
-      error: 'Güncelleme başarısız.',
-      details: err.message
-    });
+    console.error("updateUser hatası:", err);
+    return res.status(500).json({ error: "Güncelleme başarısız.", details: err.message });
   }
 };
 
 // ✅ Şoför listesi
-exports.getSoforler = async (req, res) => {
+exports.getSoforler = async (_req, res) => {
   try {
     const soforler = await User.find({ roleGroupId: "sofor" })
       .select("name telefon musaitlik lokasyonlar lokasyon")
       .populate("lokasyonlar", "ad")
       .populate("lokasyon", "ad");
 
-    // legacy fallback'lı düz çıktı
     const out = soforler.map(u => {
-      const lokDocs = (u.lokasyonlar && u.lokasyonlar.length) ? u.lokasyonlar : (u.lokasyon ? [u.lokasyon] : []);
+      const lokDocs = (u.lokasyonlar && u.lokasyonlar.length)
+        ? u.lokasyonlar
+        : (u.lokasyon ? [u.lokasyon] : []);
       return {
         _id: u._id,
         name: u.name,
@@ -260,6 +271,7 @@ exports.getSoforler = async (req, res) => {
 
     res.json(out);
   } catch (err) {
+    console.error("getSoforler hatası:", err);
     res.status(500).json({ error: "Şoför listesi alınamadı." });
   }
 };
