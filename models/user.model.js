@@ -1,70 +1,96 @@
+// models/user.model.js
 const mongoose = require("mongoose");
+const RoleGroup = require("./roleGroup.model"); // roleGroupId doğrulaması için (opsiyonel)
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    // Kimlik
+    name:     { type: String, required: true, trim: true },
+    email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
 
-    organizasyon: { type: String, required: true },
-    personelGrubu: { type: String, required: true },
-    roleGroupId: { type: String, required: true },
+    // Organizasyon / Rol
+    organizasyon:  { type: String, required: true, trim: true },
+    personelGrubu: { type: String, required: true, trim: true },
+    roleGroupId:   { type: String, required: true, trim: true }, // RoleGroup.roleGroupId ile string eşleşme
 
-    perms: { type: [String], default: [] },
-
-    permissions: {
+    // Serbest yetki alanı (gönderdiğin formatta saklanır)
+    // Örn: { "talep.view": 1, "tanim.sofor.create": true, "custom": { canExport: true } }
+    yetkiler: {
       type: Map,
-      of: {
-        type: [String],
-        validate: {
-          validator: (arr) =>
-            Array.isArray(arr) &&
-            arr.every((a) =>
-              ["view", "create", "update", "delete"].includes(
-                String(a).toLowerCase()
-              )
-            ),
-          message:
-            "permissions.* sadece 'view','create','update','delete' olabilir.",
-        },
-        default: [],
-      },
+      of: mongoose.Schema.Types.Mixed,
       default: {},
     },
 
     // (opsiyonel) ekstra string lokasyon etiketleri
     locations: { type: [String], default: [] },
 
-    tc: { type: String, default: null },
+    // Profil / İlgili referanslar
+    tc:        { type: String, default: null },
     departman: { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
 
-    // ✅ YENİ: Çoklu lokasyon
+    // Çoklu lokasyon (yeni)
     lokasyonlar: [{ type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon" }],
 
-    // ✅ LEGACY: Eski tekil alan. Geriye dönük uyumluluk için tuttuk.
+    // Legacy tekil lokasyon (geri uyumluluk)
     lokasyon: { type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon", default: null },
 
     bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
-    ulke: { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
-    musaitlik: { type: Boolean, default: true },
-    telefon: { type: String, default: null },
-    mail: { type: String, default: null },
+    ulke:  { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
+
+    // Diğer alanlar
+    musaitlik:   { type: Boolean, default: true },
+    telefon:     { type: String, default: null },
+    mail:        { type: String, default: null },
     dogumTarihi: { type: Date, default: null },
-    cinsiyet: { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
-    ehliyet: { type: Boolean, default: false },
-    resetPasswordToken: { type: String, default: null },
+    cinsiyet:    { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
+    ehliyet:     { type: Boolean, default: false },
+
+    // Şifre sıfırlama
+    resetPasswordToken:   { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// Map -> düz obje
-if (!userSchema.options.toJSON) userSchema.options.toJSON = {};
-userSchema.options.toJSON.transform = function (doc, ret) {
-  if (ret.permissions instanceof Map) {
-    ret.permissions = Object.fromEntries(ret.permissions);
-  }
-  return ret;
-};
+/* ========= Virtual Populate =========
+   User.roleGroupId (string)  <->  RoleGroup.roleGroupId (string)
+*/
+userSchema.virtual("roleGroup", {
+  ref: "RoleGroup",
+  localField: "roleGroupId",
+  foreignField: "roleGroupId",
+  justOne: true,
+});
+
+/* ========= (Opsiyonel) roleGroupId doğrulama =========
+   İstersen bu bloğu kaldırabilirsin; kaldırırsan her roleGroupId kabul edilir.
+*/
+userSchema.path("roleGroupId").validate({
+  validator: async function (v) {
+    if (!v) return false;
+    const exists = await RoleGroup.exists({ roleGroupId: v });
+    return !!exists;
+  },
+  message: (props) => `Geçersiz roleGroupId: '${props.value}' — RoleGroup'da bulunamadı.`,
+});
+
+/* ========= JSON dönüşümü =========
+   - Virtual alanları dahil et
+   - Map(yetkiler) -> düz obje
+*/
+userSchema.set("toJSON", {
+  virtuals: true,
+  transform: (_doc, ret) => {
+    if (ret?.yetkiler instanceof Map) {
+      ret.yetkiler = Object.fromEntries(ret.yetkiler);
+    }
+    return ret;
+  },
+});
+
+/* ========= Indexler ========= */
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ roleGroupId: 1 });
 
 module.exports = mongoose.model("User", userSchema);

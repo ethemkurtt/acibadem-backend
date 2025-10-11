@@ -1,31 +1,27 @@
+// controllers/user.controller.js
 // ... üst require'lar aynı
 const User = require("../models/user.model");
-// helper: response builder (fallback dahil)
+
+// helper: Map/Mixed -> plain object
+function mapToPlain(objOrMap) {
+  if (!objOrMap) return {};
+  if (objOrMap instanceof Map) return Object.fromEntries(objOrMap);
+  if (typeof objOrMap === "object" && !Array.isArray(objOrMap)) return { ...objOrMap };
+  return {};
+}
+
+// helper: response builder (roleGroup + yetkiler dahil)
 async function userResponse(user) {
   const RoleGroup = require("../models/roleGroup.model");
-  const group = await RoleGroup.findOne({ roleId: user.roleGroupId });
 
-  const groupPerms = Array.isArray(group?.yetkiler?.perms) ? group.yetkiler.perms : [];
-  let groupPermissions = {};
-  if (group?.yetkiler?.permissions instanceof Map) {
-    groupPermissions = Object.fromEntries(group.yetkiler.permissions);
-  } else if (group?.yetkiler?.permissions && typeof group.yetkiler.permissions === "object") {
-    for (const [k, v] of Object.entries(group.yetkiler.permissions)) {
-      if (!k.startsWith("$")) groupPermissions[k] = v;
-    }
-  }
+  // RoleGroup'u roleGroupId (string) ile bul
+  const group = await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean();
 
-  const userPerms = Array.isArray(user.perms) ? user.perms : [];
-  let userPermissions = {};
-  if (user.permissions instanceof Map) userPermissions = Object.fromEntries(user.permissions);
-  else if (user.permissions && typeof user.permissions === "object") {
-    for (const [k, v] of Object.entries(user.permissions)) {
-      if (!k.startsWith("$")) userPermissions[k] = v;
-    }
-  }
+  // RoleGroup.yetkiler'i düz objeye çevir
+  const groupYetkiler = group ? mapToPlain(group.yetkiler) : {};
 
-  const mergedPerms = Array.from(new Set([...groupPerms, ...userPerms]));
-  const mergedPermissions = { ...groupPermissions, ...userPermissions };
+  // Kullanıcı yetkilerini düz objeye çevir
+  const userYetkiler = mapToPlain(user.yetkiler);
 
   // 🔑 Fallback: lokasyonlar boşsa tekil lokasyonu diziye çevir
   const lokDocs = (user.lokasyonlar && user.lokasyonlar.length)
@@ -39,7 +35,7 @@ async function userResponse(user) {
     organizasyon: user.organizasyon || null,
     personelGrubu: user.personelGrubu || null,
     roleGroupId: user.roleGroupId,
-    roleGroupName: group?.roleName || null,
+    roleGroupName: group?.roleGroupName || null,
 
     tc: user.tc,
     telefon: user.telefon,
@@ -59,8 +55,15 @@ async function userResponse(user) {
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
 
-    perms: mergedPerms,
-    permissions: mergedPermissions
+    // 🔵 YENİ: Kullanıcının kendi yetkileri (Map -> plain)
+    yetkiler: userYetkiler,
+
+    // 🔵 YENİ: RoleGroup bilgisi (roleGroupId ile) + grubun yetkileri
+    roleGroup: group ? {
+      roleGroupId: group.roleGroupId,
+      roleGroupName: group.roleGroupName,
+      yetkiler: groupYetkiler
+    } : null
   };
 }
 
@@ -70,14 +73,12 @@ exports.createUser = async (req, res) => {
     const {
       name, email, password, organizasyon, personelGrubu, roleGroupId,
       tc, departman, lokasyonlar, lokasyon, bolge, ulke, telefon, mail,
-      dogumTarihi, cinsiyet, ehliyet, permissions, perms
+      dogumTarihi, cinsiyet, ehliyet, yetkiler // <- perms/permissions yerine
     } = req.body;
 
     if (!name || !email || !password || !personelGrubu || !roleGroupId || !organizasyon) {
       return res.status(400).json({ error: "Ad, email, şifre, personelGrubu, roleGroupId ve organizasyon zorunludur." });
     }
-
-    if (perms && !Array.isArray(perms)) return res.status(400).json({ error: "perms bir dizi (string[]) olmalı." });
 
     const existing = await User.findOne({ email });
     if (existing) return res.status(409).json({ error: "Bu e-posta zaten kayıtlı." });
@@ -96,7 +97,7 @@ exports.createUser = async (req, res) => {
       lokasyon: lokasyon || null, // legacy alanı da set edelim istenirse
       bolge: bolge || null, ulke: ulke || null, telefon: telefon || null, mail: mail || null,
       dogumTarihi: dogumTarihi || null, cinsiyet: cinsiyet || null, ehliyet: ehliyet ?? false,
-      permissions: permissions || {}, perms: perms || []
+      yetkiler: yetkiler || {} // <- kullanıcının kendi yetkileri
     });
 
     await newUser.save();
@@ -110,21 +111,19 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({ message: "Kullanıcı oluşturuldu.", user: await userResponse(populatedUser) });
   } catch (err) {
-  console.error("createUser hatası:", err);
+    console.error("createUser hatası:", err);
 
-  // Eğer Mongo duplicate key hatasıysa
-  if (err.code === 11000) {
-    return res.status(409).json({ error: "Bu e-posta zaten kayıtlı." });
+    if (err.code === 11000) {
+      return res.status(409).json({ error: "Bu e-posta zaten kayıtlı." });
+    }
+
+    return res.status(500).json({
+      error: "Kullanıcı oluşturulamadı.",
+      details: err.message,
+      stack: err.stack,
+      mongoError: err.errors || null
+    });
   }
-
-  // Geri kalan tüm hataları olduğu gibi JSON’a bas
-  return res.status(500).json({
-    error: "Kullanıcı oluşturulamadı.",
-    details: err.message,       // hata mesajı
-    stack: err.stack,           // stack trace
-    mongoError: err.errors || null // mongoose validation hataları varsa
-  });
-}
 };
 
 // ✅ Hepsini getir
@@ -164,7 +163,6 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -193,13 +191,12 @@ exports.updateUser = async (req, res) => {
       raw.lokasyonlar = [raw.lokasyon].filter(Boolean);
     }
 
-    // 4) Boş stringleri (''), özellikle "değiştirmedim" niyeti varsa set etmeyelim
-    //    (Bilerek boşaltmak istersen FE'den null gönder; null'u burada silmiyoruz)
+    // 4) Boş stringleri sil (bilerek null gönderilirse saklanır)
     for (const [k, v] of Object.entries(raw)) {
       if (v === '') delete raw[k];
     }
 
-    // 5) Update öncesi dokümanı çek (teşhis için)
+    // 5) Update öncesi dokümanı çek
     const before = await User.findById(id).lean();
     if (!before) {
       return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
@@ -225,10 +222,10 @@ exports.updateUser = async (req, res) => {
     return res.json({
       message: 'Güncelleme denemesi tamamlandı',
       acknowledged: result.acknowledged,
-      matchedCount: result.matchedCount,   // 1 değilse id yanlış
-      modifiedCount: result.modifiedCount, // 0 ise değerler aynı kalmış olabilir
-      setTried: raw,                       // server’ın gerçekten set etmeye çalıştığı veriler
-      diff,                                // önce/sonra farkı
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      setTried: raw,
+      diff,
       user: await userResponse(after)
     });
   } catch (err) {
