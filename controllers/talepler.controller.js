@@ -163,7 +163,7 @@ exports.updateById = async (req, res) => {
 exports.assignAracSofor = async (req, res) => {
   try {
     const { id } = req.params;
-    const { soforId, aracId } = req.body;
+    const { soforId, aracId, lokasyonId } = req.body; // <- lokasyonId eklendi
 
     if (!isId(id)) {
       return res.status(400).json({ error: "Geçersiz talep id" });
@@ -179,11 +179,21 @@ exports.assignAracSofor = async (req, res) => {
       atamaYapanId,
       atamaYapanAdSoyad,
     };
+
+    // Şoför
     if (soforId !== undefined) {
-      update.sofor = isId(soforId) ? soforId : null; // boş gönderildiyse temizleyebilmek için null koyuyoruz
+      update.sofor = isId(soforId) ? soforId : null; // boş/invalid gelirse temizle
     }
+
+    // Araç
     if (aracId !== undefined) {
       update.arac = isId(aracId) ? aracId : null;
+    }
+
+    // Lokasyon
+    if (lokasyonId !== undefined) {
+      update.lokasyon = isId(lokasyonId) ? lokasyonId : null;
+      update.lokasyonSonDegistirenId = atamaYapanId || null;
     }
 
     const item = await Talepler.findByIdAndUpdate(id, update, {
@@ -202,7 +212,7 @@ exports.assignAracSofor = async (req, res) => {
 
     return res.json({
       message: "Atama başarılı",
-      item, // tek kayıt, tüm alanları ve populate edilmiş referanslarıyla
+      item, // tek kayıt, populate edilmiş
     });
   } catch (err) {
     console.error("❌ assignAracSofor hata:", err);
