@@ -160,6 +160,55 @@ exports.updateById = async (req, res) => {
       .json({ message: "Talep güncellenemedi", error: err.message });
   }
 };
+exports.assignAracSofor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { soforId, aracId } = req.body;
+
+    if (!isId(id)) {
+      return res.status(400).json({ error: "Geçersiz talep id" });
+    }
+
+    // Atayan kullanıcı bilgileri
+    const atamaYapanId = req.user?._id || req.userId || null;
+    const atamaYapanAdSoyad = req.user?.fullName || req.user?.name || "";
+
+    // Güncelleme gövdesi
+    const update = {
+      atamaDurumu: "Evet",
+      atamaYapanId,
+      atamaYapanAdSoyad,
+    };
+    if (soforId !== undefined) {
+      update.sofor = isId(soforId) ? soforId : null; // boş gönderildiyse temizleyebilmek için null koyuyoruz
+    }
+    if (aracId !== undefined) {
+      update.arac = isId(aracId) ? aracId : null;
+    }
+
+    const item = await Talepler.findByIdAndUpdate(id, update, {
+      new: true,
+      runValidators: true,
+    })
+      .populate([{ path: "lokasyon" }, { path: "arac" }])
+      .populate({ path: "sofor", select: userSelectExclude })
+      .populate({ path: "talepEdenId", select: userSelectExclude })
+      .populate({ path: "atamaYapanId", select: userSelectExclude })
+      .populate({ path: "lokasyonSonDegistirenId", select: userSelectExclude });
+
+    if (!item) {
+      return res.status(404).json({ error: "Talep bulunamadı" });
+    }
+
+    return res.json({
+      message: "Atama başarılı",
+      item, // tek kayıt, tüm alanları ve populate edilmiş referanslarıyla
+    });
+  } catch (err) {
+    console.error("❌ assignAracSofor hata:", err);
+    return res.status(500).json({ error: "Atama yapılamadı", details: err.message });
+  }
+};
 
 exports.deleteById = async (req, res) => {
   try {

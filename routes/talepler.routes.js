@@ -12,6 +12,7 @@ router.get("/aracTalep", authRequired,ctrl.aracTalep);
 router.get("/:id", ctrl.getById);
 
 router.put("/:id", ctrl.updateById);
+router.put("/:id/atama", authRequired,ctrl.assignAracSofor);
 router.delete("/:id", ctrl.deleteById);
 
 module.exports = router;
