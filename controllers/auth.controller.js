@@ -1,13 +1,12 @@
 // controllers/auth.controller.js
-// Tam sürüm – RoleGroup & Role yetki birleştirme, güvenli ENV, e-posta normalize,
-// JWT payload'a lokasyon eklendi, tutarlı login/getMe hesaplaması, sağlamlaştırmalar.
+// Minimal JWT + user payload: roleGroup & yetkiler dahil
+// Şifre sıfırlama akışı dâhil; FRONTEND_BASE_URL ve JWT_SECRET zorunlu.
 
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const User = require("../models/user.model");
-const Role = require("../models/role.model");
 const RoleGroup = require("../models/roleGroup.model");
 const { sendMail } = require("../utils/mailer");
 
@@ -27,123 +26,44 @@ function getJwtSecret() {
   return secret;
 }
 
-function mapLikeToPlainObject(input) {
+// Map/Mixed -> düz obje
+function mapToPlain(input) {
   if (!input) return {};
   if (input instanceof Map) return Object.fromEntries(input);
-  if (typeof input === "object") return { ...input };
+  if (typeof input === "object" && !Array.isArray(input)) return { ...input };
   return {};
 }
 
-function stripDollarKeys(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj || {})) {
-    if (!k.startsWith("$")) out[k] = v;
+// Kullanıcıyı FE’ye dönecek formatta hazırla (roleGroup + yetkiler dahil)
+function buildUserPayload(user, roleGroupDoc) {
+  const userYetkiler = mapToPlain(user.yetkiler);
+
+  let roleGroup = null;
+  if (roleGroupDoc) {
+    const groupYetkiler = mapToPlain(roleGroupDoc.yetkiler);
+    roleGroup = {
+      roleGroupId: roleGroupDoc.roleGroupId,
+      roleGroupName: roleGroupDoc.roleGroupName,
+      yetkiler: groupYetkiler, // varsa encode edilmiş anahtarlar olduğu gibi döner
+    };
   }
-  return out;
-}
 
-function mergePagePermissions(groupObj, userObj) {
-  const base = stripDollarKeys(mapLikeToPlainObject(groupObj));
-  const user = stripDollarKeys(mapLikeToPlainObject(userObj));
-  return { ...base, ...user }; // user aynı sayfayı yazdıysa override
-}
+  const lokDocs =
+    user.lokasyonlar?.length
+      ? user.lokasyonlar
+      : (user.lokasyon ? [user.lokasyon] : []);
 
-function mergeStringPerms(...lists) {
-  const flat = lists
-    .filter(Array.isArray)
-    .flat()
-    .filter((x) => typeof x === "string");
-  return Array.from(new Set(flat));
-}
-
-function mergeNumericAccess(...lists) {
-  const flat = lists
-    .filter(Array.isArray)
-    .flat()
-    .filter((x) => Number.isFinite(x));
-  return Array.from(new Set(flat));
-}
-
-async function findRoleGroupForUser(user) {
-  if (!user?.roleGroupId) return null;
-
-  const q = {
-    $or: [
-      { _id: user.roleGroupId },
-      { roleId: user.roleGroupId },
-      { roleName: user.roleGroupId },
-    ],
-  };
-  try {
-    const doc = await RoleGroup.findOne(q);
-    return doc || null;
-  } catch {
-    try {
-      const doc = await RoleGroup.findOne({
-        $or: [{ roleId: String(user.roleGroupId) }, { roleName: String(user.roleGroupId) }],
-      });
-      return doc || null;
-    } catch {
-      return null;
-    }
-  }
-}
-
-async function findPrimaryRoleDoc(user) {
-  if (!user?.role) return null;
-  try {
-    const doc = await Role.findOne({ name: user.role });
-    return doc || null;
-  } catch {
-    return null;
-  }
-}
-
-async function computeAccess(user, roleDoc) {
-  let roleAccess = [];
-  if (user.role === "superadmin") {
-    roleAccess = Array.from({ length: 100 }, (_, i) => i + 1);
-  } else {
-    roleAccess = Array.isArray(roleDoc?.access) ? roleDoc.access : [];
-  }
-  return mergeNumericAccess(user.access || [], roleAccess);
-}
-
-async function computeAllPermissions(user) {
-  const roleDoc = await findPrimaryRoleDoc(user);
-  const groupDoc = await findRoleGroupForUser(user);
-
-  // String perms
-  const rolePerms = Array.isArray(roleDoc?.permissions) ? roleDoc.permissions : [];
-  const groupPerms = Array.isArray(groupDoc?.yetkiler?.perms) ? groupDoc.yetkiler.perms : [];
-  const userPerms = Array.isArray(user?.perms) ? user.perms : [];
-  const finalPerms = mergeStringPerms(rolePerms, groupPerms, userPerms);
-
-  // Sayfa bazlı permissions (obj)
-  const groupPermsObj = mapLikeToPlainObject(groupDoc?.yetkiler?.permissions);
-  const userPermsObj = mapLikeToPlainObject(user?.permissions);
-  const mergedPermissions = mergePagePermissions(groupPermsObj, userPermsObj);
-
-  return { finalPerms, mergedPermissions, roleDoc };
-}
-
-// FE’ye dönecek kullanıcı formatı
-function userResponse(user, access, perms, mergedPermissions) {
   return {
     id: user._id,
     name: user.name,
     email: user.email,
 
-    // backward-compat
-    role: user.role,
-    access,
+    organizasyon: user.organizasyon || null,
+    personelGrubu: user.personelGrubu || null,
+    roleGroupId: user.roleGroupId || null,
+    roleGroup,              // <- RoleGroup bilgisi + grup yetkileri
+    yetkiler: userYetkiler, // <- kullanıcının kendi yetkileri
 
-    // yeni RBAC alanları
-    roles: user.roles || [],
-    perms: perms || [],
-    permissions: mergedPermissions || {},
-
-    // profil alanları
     tc: user.tc,
     telefon: user.telefon,
     mail: user.mail,
@@ -151,15 +71,18 @@ function userResponse(user, access, perms, mergedPermissions) {
     cinsiyet: user.cinsiyet,
     ehliyet: user.ehliyet,
 
-    // referanslar
     departman: user.departman?._id || null,
     departmanName: user.departman?.ad || null,
-    lokasyon: user.lokasyon?._id || null,     // FE için lokasyon id
-    lokasyonName: user.lokasyon?.ad || null,  // FE için lokasyon adı
+
     bolge: user.bolge?._id || null,
     bolgeName: user.bolge?.ad || null,
     ulke: user.ulke?._id || null,
     ulkeName: user.ulke?.ad || null,
+
+    lokasyon: user.lokasyon?._id || user.lokasyon || null,
+    lokasyonName: user.lokasyon?.ad || null,
+    lokasyonlar: lokDocs.map(l => l?._id ?? l).filter(Boolean),
+    lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
   };
 }
 
@@ -190,63 +113,32 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password || "");
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
-    // Tüm yetkileri hesapla (role + roleGroup + user)
-    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
-    const finalAccess = await computeAccess(user, roleDoc);
+    // RoleGroup’u roleGroupId ile çek
+    const roleGroupDoc = user.roleGroupId
+      ? await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean()
+      : null;
 
-    const lokDocs = (user.lokasyonlar && user.lokasyonlar.length)
-      ? user.lokasyonlar
-      : (user.lokasyon ? [user.lokasyon] : []);
+    // FE’de kullanılacak payload
+    const userPayload = buildUserPayload(user, roleGroupDoc);
 
-    // JWT'ye gerekli tüm context bilgilerini koy
+    // JWT – İSTEDİĞİN ALANLAR GÖMÜLDÜ
     const token = jwt.sign(
       {
         id: user._id,
-        role: user.role,
-        access: finalAccess,
-        roles: user.roles || [],
-        perms: finalPerms,
-        permissions: mergedPermissions,
-        lokasyon: user.lokasyon?._id || user.lokasyon || null,
         roleGroupId: user.roleGroupId || null,
+        lokasyon: userPayload.lokasyon,
+        lokasyonlar: userPayload.lokasyonlar,
+        yetkiler: userPayload.yetkiler,
+        roleGroup: userPayload.roleGroup,
       },
       getJwtSecret(),
       { expiresIn: "1h" }
     );
 
-    res.json({
+    return res.json({
       message: "Giriş başarılı.",
       token,
-      role: user.role,
-      access: finalAccess,
-      perms: finalPerms,
-      roles: user.roles || [],
-      permissions: mergedPermissions,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role || null,
-        roleGroupId: user.roleGroupId || null,
-        tc: user.tc,
-        telefon: user.telefon,
-        mail: user.mail,
-        dogumTarihi: user.dogumTarihi,
-        cinsiyet: user.cinsiyet,
-        ehliyet: user.ehliyet,
-
-        departman: user.departman?._id || null,
-        departmanName: user.departman?.ad || null,
-        bolge: user.bolge?._id || null,
-        bolgeName: user.bolge?.ad || null,
-        ulke: user.ulke?._id || null,
-        ulkeName: user.ulke?.ad || null,
-
-        lokasyon: user.lokasyon?._id || user.lokasyon || null,
-        lokasyonName: user.lokasyon?.ad || null,
-        lokasyonlar: lokDocs.map(l => l?._id ?? l).filter(Boolean),
-        lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
-      }
+      user: userPayload,
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -254,36 +146,32 @@ exports.login = async (req, res) => {
   }
 };
 
-
+// ───────────────────────────────────────────────────────────────────────────────
+// AUTH: getMe (token’dan kimim?)
 // ───────────────────────────────────────────────────────────────────────────────
 exports.getMe = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Token bulunamadı." });
+    const raw = req.headers.authorization?.split(" ")[1];
+    if (!raw) return res.status(401).json({ error: "Token bulunamadı." });
 
-    const decoded = jwt.verify(token, getJwtSecret());
+    const decoded = jwt.verify(raw, getJwtSecret());
 
     const user = await User.findById(decoded.id)
       .select("-password")
       .populate("departman", "ad")
+      .populate("lokasyonlar", "ad")
       .populate("lokasyon", "ad")
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
 
-    // Tutarlılık için yetkileri DB'den yeniden hesapla
-    const { finalPerms, mergedPermissions, roleDoc } = await computeAllPermissions(user);
-    const finalAccess = await computeAccess(user, roleDoc);
+    const roleGroupDoc = user.roleGroupId
+      ? await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean()
+      : null;
 
-    return res.json({
-      user: userResponse(user, finalAccess, finalPerms, mergedPermissions),
-      role: user.role,
-      access: finalAccess,
-      perms: finalPerms,
-      roles: user.roles || [],
-      permissions: mergedPermissions,
-    });
+    const userPayload = buildUserPayload(user, roleGroupDoc);
+    return res.json({ user: userPayload });
   } catch (err) {
     console.error("getMe error:", err);
     if (err?.name === "TokenExpiredError") {
