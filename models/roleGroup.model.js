@@ -1,30 +1,29 @@
 // models/roleGroup.model.js
 const mongoose = require("mongoose");
+const { decodeKeys } = require("../utils/dotKeyCodec");
 
 const roleGroupSchema = new mongoose.Schema(
   {
     roleGroupId:   { type: String, required: true, unique: true, trim: true },
     roleGroupName: { type: String, required: true, trim: true },
-
-    // Gönderdiğin her şeyi olduğu gibi saklar (key ve value sınırlaması yok)
     yetkiler: {
       type: Map,
-      of: mongoose.Schema.Types.Mixed, // 0/1, true/false, string vs. hepsi olur
+      of: mongoose.Schema.Types.Mixed,
       default: {},
     },
   },
   { timestamps: true }
 );
 
-// indeksler
 roleGroupSchema.index({ roleGroupId: 1 }, { unique: true });
 roleGroupSchema.index({ roleGroupName: 1 });
 
-// JSON çıktısında Map -> plain object
 if (!roleGroupSchema.options.toJSON) roleGroupSchema.options.toJSON = {};
 roleGroupSchema.options.toJSON.transform = function (_doc, ret) {
   if (ret?.yetkiler instanceof Map) {
-    ret.yetkiler = Object.fromEntries(ret.yetkiler);
+    // Map -> plain ve anahtarları decode et
+    const plain = Object.fromEntries(ret.yetkiler);
+    ret.yetkiler = decodeKeys(plain);
   }
   return ret;
 };
