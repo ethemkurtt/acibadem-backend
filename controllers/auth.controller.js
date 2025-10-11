@@ -1,7 +1,4 @@
 // controllers/auth.controller.js
-// Minimal JWT + user payload: roleGroup & yetkiler dahil
-// Şifre sıfırlama akışı dâhil; FRONTEND_BASE_URL ve JWT_SECRET zorunlu.
-
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -10,48 +7,64 @@ const User = require("../models/user.model");
 const RoleGroup = require("../models/roleGroup.model");
 const { sendMail } = require("../utils/mailer");
 
-// FRONTEND adresi (.env'den), sonda / temizlenir
+// Eğer roleGroup.controller'da kullandığın codec varsa dahil et
+const { decodeKeys } = require("../utils/dotKeyCodec"); // yoksa silebilirsin
+
 const FRONTEND_BASE_URL = (
   process.env.FRONTEND_BASE_URL || "https://acibadem.arndevelopment.com.tr"
 ).replace(/\/+$/, "");
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Yardımcılar
-// ───────────────────────────────────────────────────────────────────────────────
+// ───────────────── helpers ─────────────────
 function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is required");
-  }
-  return secret;
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error("JWT_SECRET environment variable is required");
+  return s;
 }
-
-// Map/Mixed -> düz obje
 function mapToPlain(input) {
   if (!input) return {};
   if (input instanceof Map) return Object.fromEntries(input);
   if (typeof input === "object" && !Array.isArray(input)) return { ...input };
   return {};
 }
+// Anahtar normalizasyonu: tüm boşlukları kaldır + "." etrafındaki boşlukları sil
+function normalizePermKeys(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+  const out = {};
+  for (const [rawK, v] of Object.entries(obj)) {
+    let k = String(rawK);
+    // önce nokta çevresindeki boşlukları kaldır
+    k = k.replace(/\s*\.\s*/g, ".");
+    // kalan tüm boşlukları kaldır
+    k = k.replace(/\s+/g, "");
+    out[k] = v;
+  }
+  return out;
+}
 
 // Kullanıcıyı FE’ye dönecek formatta hazırla (roleGroup + yetkiler dahil)
 function buildUserPayload(user, roleGroupDoc) {
-  const userYetkiler = mapToPlain(user.yetkiler);
+  // user.yetkiler (decode varsa -> decode, sonra normalize)
+  let userYet = mapToPlain(user.yetkiler);
+  try { userYet = decodeKeys ? decodeKeys(userYet) : userYet; } catch {}
+  userYet = normalizePermKeys(userYet);
 
+  // roleGroup.yetkiler (decode varsa -> decode, sonra normalize)
   let roleGroup = null;
   if (roleGroupDoc) {
-    const groupYetkiler = mapToPlain(roleGroupDoc.yetkiler);
+    let groupYet = mapToPlain(roleGroupDoc.yetkiler);
+    try { groupYet = decodeKeys ? decodeKeys(groupYet) : groupYet; } catch {}
+    groupYet = normalizePermKeys(groupYet);
+
     roleGroup = {
       roleGroupId: roleGroupDoc.roleGroupId,
       roleGroupName: roleGroupDoc.roleGroupName,
-      yetkiler: groupYetkiler, // varsa encode edilmiş anahtarlar olduğu gibi döner
+      yetkiler: groupYet,
     };
   }
 
-  const lokDocs =
-    user.lokasyonlar?.length
-      ? user.lokasyonlar
-      : (user.lokasyon ? [user.lokasyon] : []);
+  const lokDocs = user.lokasyonlar?.length
+    ? user.lokasyonlar
+    : (user.lokasyon ? [user.lokasyon] : []);
 
   return {
     id: user._id,
@@ -61,8 +74,9 @@ function buildUserPayload(user, roleGroupDoc) {
     organizasyon: user.organizasyon || null,
     personelGrubu: user.personelGrubu || null,
     roleGroupId: user.roleGroupId || null,
-    roleGroup,              // <- RoleGroup bilgisi + grup yetkileri
-    yetkiler: userYetkiler, // <- kullanıcının kendi yetkileri
+
+    roleGroup,              // -> grup bilgisi + normalize edilmiş yetkiler
+    yetkiler: userYet,      // -> kullanıcının normalize edilmiş yetkileri
 
     tc: user.tc,
     telefon: user.telefon,
@@ -86,14 +100,11 @@ function buildUserPayload(user, roleGroupDoc) {
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-// AUTH: Login
-// ───────────────────────────────────────────────────────────────────────────────
+// ───────────────── login ─────────────────
 exports.login = async (req, res) => {
   try {
     const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
-
     if (!email || !password) {
       return res.status(400).json({ error: "E-posta ve şifre zorunludur." });
     }
@@ -106,49 +117,38 @@ exports.login = async (req, res) => {
       .populate("bolge", "ad")
       .populate("ulke", "ad");
 
-    if (!user) {
-      return res.status(401).json({ error: "Kullanıcı bulunamadı." });
-    }
+    if (!user) return res.status(401).json({ error: "Kullanıcı bulunamadı." });
 
     const isMatch = await bcrypt.compare(password, user.password || "");
     if (!isMatch) return res.status(401).json({ error: "Şifre hatalı." });
 
-    // RoleGroup’u roleGroupId ile çek
     const roleGroupDoc = user.roleGroupId
       ? await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean()
       : null;
 
-    // FE’de kullanılacak payload
     const userPayload = buildUserPayload(user, roleGroupDoc);
 
-    // JWT – İSTEDİĞİN ALANLAR GÖMÜLDÜ
     const token = jwt.sign(
       {
         id: user._id,
         roleGroupId: user.roleGroupId || null,
         lokasyon: userPayload.lokasyon,
         lokasyonlar: userPayload.lokasyonlar,
-        yetkiler: userPayload.yetkiler,
-        roleGroup: userPayload.roleGroup,
+        yetkiler: userPayload.yetkiler,     // boşluksuz anahtarlar
+        roleGroup: userPayload.roleGroup,   // boşluksuz anahtarlar
       },
       getJwtSecret(),
       { expiresIn: "1h" }
     );
 
-    return res.json({
-      message: "Giriş başarılı.",
-      token,
-      user: userPayload,
-    });
+    return res.json({ message: "Giriş başarılı.", token, user: userPayload });
   } catch (err) {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
-// ───────────────────────────────────────────────────────────────────────────────
-// AUTH: getMe (token’dan kimim?)
-// ───────────────────────────────────────────────────────────────────────────────
+// ───────────────── getMe ─────────────────
 exports.getMe = async (req, res) => {
   try {
     const raw = req.headers.authorization?.split(" ")[1];
@@ -184,8 +184,8 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// ───────────────────────────────────────────────────────────────────────────────
-// PASSWORD RESET: forgot (mail gönder)
+// ───────── forgotPassword / verifyResetToken / resetPassword — değişmedi ───────
+
 // ───────────────────────────────────────────────────────────────────────────────
 exports.forgotPassword = async (req, res) => {
   try {
