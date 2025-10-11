@@ -255,20 +255,20 @@ exports.getFullById = async (req, res) => {
 };
 
 
+
 exports.aracTalep = async (req, res) => {
   try {
     const {
       requestType,
       sofor,
       lokasyon,          // opsiyonel: tekil lokasyon filtresi
-      // atamaDurumu,    // dışarıdan gelse bile sadece "Hayır" döndüreceğiz
-      startDate,
-      endDate,
+      // startDate,       // tarih filtresi kaldırıldı
+      // endDate,         // tarih filtresi kaldırıldı
       page = 1,
       limit = 20,
     } = req.query;
 
-    // ---- Kullanıcının lokasyonlarını topla (senin verdiğin örnekle birebir mantık) ----
+    // ---- Kullanıcının lokasyonlarını topla ----
     const user = req.user || {};
     let userLokasyonIds = [];
 
@@ -277,7 +277,7 @@ exports.aracTalep = async (req, res) => {
     }
     if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
       userLokasyonIds.push(
-        ...user.lokasyonlar.filter(Boolean).map(l => new ObjectId(l.toString()))
+        ...user.lokasyonlar.filter(Boolean).map((l) => new ObjectId(l.toString()))
       );
     }
     if (user.lokasyon) {
@@ -285,7 +285,9 @@ exports.aracTalep = async (req, res) => {
     }
 
     // Duplicate temizle
-    userLokasyonIds = [...new Set(userLokasyonIds.map(id => id.toString()))].map(id => new ObjectId(id));
+    userLokasyonIds = [...new Set(userLokasyonIds.map((id) => id.toString()))].map(
+      (id) => new ObjectId(id)
+    );
 
     if (!userLokasyonIds.length) {
       return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
@@ -294,26 +296,10 @@ exports.aracTalep = async (req, res) => {
     // ---- Ana filtre nesnesi ----
     const q = {};
 
-    // Zorunlu filtreler:
-    q.atamaDurumu = "Hayır"; // sadece Hayır olanlar
+    // Zorunlu filtre: sadece ataması yapılmamış olanlar
+    q.atamaDurumu = "Hayır";
 
-    // Tarih filtresi: geçmişi gösterme
-    const now = new Date();
-    let lowerBound = now; // alt sınır daima 'şu an'
-
-    // startDate/endDate varsa, alt sınırı max(now, startDate) yap
-    if (startDate) {
-      const start = new Date(`${startDate}T00:00:00.000Z`);
-      if (start > lowerBound) lowerBound = start;
-    }
-
-    const range = {};
-    range.$gte = lowerBound;
-    if (endDate) {
-      const end = new Date(`${endDate}T23:59:59.999Z`);
-      range.$lte = end;
-    }
-    q.transferTarihi = range;
+    // (TARİH FİLTRESİ KALDIRILDI) => q.transferTarihi eklenmiyor
 
     // Diğer filtreler:
     if (requestType) q.requestType = requestType;
@@ -322,9 +308,8 @@ exports.aracTalep = async (req, res) => {
     // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
     if (lokasyon && isId(lokasyon)) {
       const lokId = new ObjectId(lokasyon);
-      const isAllowed = userLokasyonIds.some(u => u.equals(lokId));
-      // yetkili değilse boş sonuç dönmek yerine 403 istiyorsan burayı değiştir
-      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000"); // eşleşme olmayacak
+      const isAllowed = userLokasyonIds.some((u) => u.equals(lokId));
+      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000"); // yetkisizse boş döner
     } else {
       q.lokasyon = { $in: userLokasyonIds };
     }
@@ -332,10 +317,10 @@ exports.aracTalep = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam sayım (aynı populate ve sort korunur)
+    // Sorgu + toplam sayım
     const [items, total] = await Promise.all([
       Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 })
+        .sort({ transferTarihi: 1, createdAt: -1 }) // sıralama aynı kalsın
         .skip(skip)
         .limit(Number(limit))
         .populate([
@@ -349,13 +334,14 @@ exports.aracTalep = async (req, res) => {
       Talepler.countDocuments(q),
     ]);
 
-    // Yanıt (ŞEMA DEĞİŞMEDİ)
+    // Yanıt şeması aynı
     res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
-      filters: { startDate, endDate },
+      // filters alanını istersen tamamen kaldırabilirsin; bırakırsak boş döndürelim
+      filters: { startDate: null, endDate: null },
     });
   } catch (err) {
     console.error("❌ aracTalep listesi alınamadı:", err);
