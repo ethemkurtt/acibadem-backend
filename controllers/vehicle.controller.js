@@ -1,25 +1,33 @@
 const mobilizAxios = require("../utils/axiosMobiliz");
-const Plaka = require("../models/Plaka"); // <-- EKLENDİ
+const Plaka = require("../models/Plaka");
+const mongoose = require("mongoose");
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Büyük/küçük harf duyarsız ve boşlukları tekleyen normalize
 function normalizePlate(v) {
   return String(v || "")
     .toUpperCase()
     .replace(/\s+/g, " ")
     .trim();
-  // Eğer tire/nokta vs. çıkarılsın dersen şu satırı da ekleyebilirsin:
-  // .replace(/[^A-Z0-9 ]/g, "")
 }
 
 exports.getEnrichedVehicles = async (req, res) => {
   try {
-    console.log("🧾 DB'den PLAKA Set'i çekiliyor...");
-    const plakaDocs = await Plaka.find({}, { plaka: 1, _id: 0 }).lean();
-    const plakaSet = new Set(plakaDocs.map(p => normalizePlate(p.plaka)));
+    console.log("🧾 DB'den PLAKA Set/Map çekiliyor...");
+    // _id'yi da alıyoruz
+    const plakaDocs = await Plaka.find({}, { plaka: 1 }).lean();
+
+    // Set (filtreleme için) ve Map (plaka -> ObjectId) beraber
+    const plakaSet = new Set();
+    const plakaIdMap = new Map();
+    for (const p of plakaDocs) {
+      const np = normalizePlate(p.plaka);
+      if (!np) continue;
+      plakaSet.add(np);
+      plakaIdMap.set(np, p._id); // <-- plakaya karşılık gelen ObjectId
+    }
 
     if (plakaSet.size === 0) {
       console.warn("⚠️ Plaka koleksiyonunda kayıt yok. Boş liste döndürülüyor.");
@@ -31,19 +39,17 @@ exports.getEnrichedVehicles = async (req, res) => {
 
     console.log("🧑‍✈️ DRIVERS alınıyor...");
     const driversRes = await mobilizAxios.get("/drivers");
-
     await sleep(300);
 
     console.log("🚛 FLEETS alınıyor...");
     const fleetsRes = await mobilizAxios.get("/fleets");
-
     await sleep(300);
 
     console.log("📂 GROUPS alınıyor...");
     const groupsRes = await mobilizAxios.get("/groups");
 
+    // Sadece DB'deki plakalara ait araçları al
     const vehicles = (vehiclesRes.data.result || []).filter(v => {
-      // Sadece DB'deki plaka setinde olan araçları al
       const np = normalizePlate(v.plate);
       return np && plakaSet.has(np);
     });
@@ -51,6 +57,11 @@ exports.getEnrichedVehicles = async (req, res) => {
     const fleets = fleetsRes.data.result || [];
     const groups = groupsRes.data.result || [];
     const drivers = driversRes.data.result || [];
+
+    // (İstersen ufak optimizasyon: id->entity map’leri)
+    const fleetMap = new Map(fleets.map(f => [f.fleetId, f]));
+    const groupMap = new Map(groups.map(g => [g.groupId, g]));
+    const driverByPlate = new Map(drivers.map(d => [normalizePlate(d.plate), d]));
 
     const enriched = await Promise.all(
       vehicles.map(async (v) => {
@@ -61,14 +72,17 @@ exports.getEnrichedVehicles = async (req, res) => {
           return null;
         }
 
-        const fleet = fleets.find(f => f.fleetId === fleetId);
-        const group = groups.find(g => g.groupId === groupId);
-
         const np = normalizePlate(plate);
-        const driver = drivers.find(d => normalizePlate(d.plate) === np);
+        const fleet = fleetMap.get(fleetId);
+        const group = groupMap.get(groupId);
+        const driver = driverByPlate.get(np);
+
+        // Plaka ObjectId'yi ekliyoruz
+        const plakaId = plakaIdMap.get(np) || null;
 
         return {
-          plate: np, // normalize edilmiş plaka döndürüyoruz
+          plakaId,           // <-- İSTENEN: Plaka collection ObjectId
+          plate: np,         // normalize edilmiş plaka
           fleet: fleet?.fleetName || null,
           group: group?.groupName || null,
           muId,

@@ -628,9 +628,6 @@ exports.iptalTalep = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ PATCH /api/hasta-talep/:id/lokasyon — Sadece lokasyon değiştirir ve kim
-//    değiştirdiyse tarihçeye yazar.
 exports.updateLokasyon = async (req, res) => {
   try {
     const { id } = req.params;

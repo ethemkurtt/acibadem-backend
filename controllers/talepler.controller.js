@@ -261,9 +261,7 @@ exports.aracTalep = async (req, res) => {
     const {
       requestType,
       sofor,
-      lokasyon,          // opsiyonel: tekil lokasyon filtresi
-      // startDate,       // tarih filtresi kaldırıldı
-      // endDate,         // tarih filtresi kaldırıldı
+      lokasyon,
       page = 1,
       limit = 20,
     } = req.query;
