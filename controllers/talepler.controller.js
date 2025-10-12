@@ -551,7 +551,7 @@ exports.taleplerim = async (req, res) => {
   }
 };
 
-exports.isAtamalarim = async (req, res) => {
+exports.islerim = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
 
@@ -606,5 +606,64 @@ exports.isAtamalarim = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Talepler listelenemedi", error: err.message });
+  }
+};
+
+
+exports.isAtamalarim = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    // Giriş yapan kullanıcı ID’si (JWT middleware’den geliyor)
+    const userIdRaw = req.user?._id || req.userId;
+    if (!userIdRaw) {
+      return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
+    }
+
+    if (!ObjectId.isValid(String(userIdRaw))) {
+      return res.status(400).json({ error: "Geçersiz kullanıcı ID" });
+    }
+    const meId = new ObjectId(String(userIdRaw));
+
+    // --- FİLTRE ---
+    const q = {
+      atamaYapanId: meId,     // benim atadığım işler
+      atamaDurumu: "Evet",    // gerçekten ataması yapılmış olanlar
+    };
+
+    // Sayfalama
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sorgu + toplam
+    const [items, total] = await Promise.all([
+      Talepler.find(q)
+        .sort({ transferTarihi: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate([
+          { path: "lokasyon" },
+          { path: "routes" },
+          { path: "sofor", select: userSelectExclude },
+          { path: "arac" },
+          { path: "talepEdenId", select: userSelectExclude },
+          { path: "atamaYapanId", select: userSelectExclude },
+          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
+        ]),
+      Talepler.countDocuments(q),
+    ]);
+
+    // Cevap
+    return res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+    });
+  } catch (err) {
+    console.error("❌ myIsAtamalarim hata:", err);
+    return res.status(500).json({
+      message: "Atadığın işler listelenemedi.",
+      error: err.message,
+    });
   }
 };
