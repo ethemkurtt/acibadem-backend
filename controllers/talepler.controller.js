@@ -1,7 +1,9 @@
 // controllers/talepler.controller.js
 const mongoose = require("mongoose");
 const Talepler = require("../models/talepler/talepler.model");
-const { Types: { ObjectId } } = require("mongoose");
+const {
+  Types: { ObjectId },
+} = require("mongoose");
 
 // Tip-özel detay modelleri
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
@@ -216,7 +218,9 @@ exports.assignAracSofor = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ assignAracSofor hata:", err);
-    return res.status(500).json({ error: "Atama yapılamadı", details: err.message });
+    return res
+      .status(500)
+      .json({ error: "Atama yapılamadı", details: err.message });
   }
 };
 
@@ -313,17 +317,9 @@ exports.getFullById = async (req, res) => {
   }
 };
 
-
-
 exports.aracTalep = async (req, res) => {
   try {
-    const {
-      requestType,
-      sofor,
-      lokasyon,
-      page = 1,
-      limit = 20,
-    } = req.query;
+    const { requestType, sofor, lokasyon, page = 1, limit = 20 } = req.query;
 
     // ---- Kullanıcının lokasyonlarını topla ----
     const user = req.user || {};
@@ -334,7 +330,9 @@ exports.aracTalep = async (req, res) => {
     }
     if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
       userLokasyonIds.push(
-        ...user.lokasyonlar.filter(Boolean).map((l) => new ObjectId(l.toString()))
+        ...user.lokasyonlar
+          .filter(Boolean)
+          .map((l) => new ObjectId(l.toString()))
       );
     }
     if (user.lokasyon) {
@@ -342,12 +340,14 @@ exports.aracTalep = async (req, res) => {
     }
 
     // Duplicate temizle
-    userLokasyonIds = [...new Set(userLokasyonIds.map((id) => id.toString()))].map(
-      (id) => new ObjectId(id)
-    );
+    userLokasyonIds = [
+      ...new Set(userLokasyonIds.map((id) => id.toString())),
+    ].map((id) => new ObjectId(id));
 
     if (!userLokasyonIds.length) {
-      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+      return res
+        .status(400)
+        .json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
     // ---- Ana filtre nesnesi ----
@@ -382,6 +382,7 @@ exports.aracTalep = async (req, res) => {
         .limit(Number(limit))
         .populate([
           { path: "lokasyon" },
+          { path: "routes" },
           { path: "sofor", select: userSelectExclude },
           { path: "arac" },
           { path: "talepEdenId", select: userSelectExclude },
@@ -402,18 +403,14 @@ exports.aracTalep = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ aracTalep listesi alınamadı:", err);
-    res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
 exports.aracIsEmri = async (req, res) => {
   try {
-    const {
-      requestType,
-      sofor,
-      lokasyon,
-      page = 1,
-      limit = 20,
-    } = req.query;
+    const { requestType, sofor, lokasyon, page = 1, limit = 20 } = req.query;
 
     // ---- Kullanıcının lokasyonlarını topla ----
     const user = req.user || {};
@@ -424,7 +421,9 @@ exports.aracIsEmri = async (req, res) => {
     }
     if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
       userLokasyonIds.push(
-        ...user.lokasyonlar.filter(Boolean).map((l) => new ObjectId(l.toString()))
+        ...user.lokasyonlar
+          .filter(Boolean)
+          .map((l) => new ObjectId(l.toString()))
       );
     }
     if (user.lokasyon) {
@@ -432,12 +431,14 @@ exports.aracIsEmri = async (req, res) => {
     }
 
     // Duplicate temizle
-    userLokasyonIds = [...new Set(userLokasyonIds.map((id) => id.toString()))].map(
-      (id) => new ObjectId(id)
-    );
+    userLokasyonIds = [
+      ...new Set(userLokasyonIds.map((id) => id.toString())),
+    ].map((id) => new ObjectId(id));
 
     if (!userLokasyonIds.length) {
-      return res.status(400).json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+      return res
+        .status(400)
+        .json({ error: "Kullanıcının lokasyon bilgisi eksik." });
     }
 
     // ---- Ana filtre nesnesi ----
@@ -472,6 +473,7 @@ exports.aracIsEmri = async (req, res) => {
         .limit(Number(limit))
         .populate([
           { path: "lokasyon" },
+          { path: "routes" },
           { path: "sofor", select: userSelectExclude },
           { path: "arac" },
           { path: "talepEdenId", select: userSelectExclude },
@@ -492,7 +494,9 @@ exports.aracIsEmri = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ aracTalep listesi alınamadı:", err);
-    res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
 
@@ -505,7 +509,9 @@ exports.taleplerim = async (req, res) => {
     if (!userIdRaw) {
       return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
     }
-    const talepEdenId = ObjectId.isValid(userIdRaw) ? new ObjectId(userIdRaw) : userIdRaw;
+    const talepEdenId = ObjectId.isValid(userIdRaw)
+      ? new ObjectId(userIdRaw)
+      : userIdRaw;
 
     // YEGANE filtre: sadece kendi oluşturdukları
     const q = { talepEdenId };
@@ -521,6 +527,7 @@ exports.taleplerim = async (req, res) => {
         .limit(Number(limit))
         .populate([
           { path: "lokasyon" },
+          { path: "routes" },
           { path: "sofor", select: userSelectExclude },
           { path: "arac" },
           { path: "talepEdenId", select: userSelectExclude },
@@ -539,6 +546,8 @@ exports.taleplerim = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ aracIsEmri listesi alınamadı:", err);
-    return res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+    return res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
