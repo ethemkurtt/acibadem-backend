@@ -551,24 +551,28 @@ exports.taleplerim = async (req, res) => {
   }
 };
 
-
 exports.isAtamalarim = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
 
-    // Giriş yapan kullanıcının ID'si
+    // Giriş yapan kullanıcı ID'si zorunlu
     const userIdRaw = req.user?._id || req.userId;
     if (!userIdRaw) {
       return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
     }
+    if (!ObjectId.isValid(String(userIdRaw))) {
+      return res.status(400).json({ error: "Geçersiz kullanıcı ID" });
+    }
+    const meId = new ObjectId(String(userIdRaw));
 
-    // sofor alanı genelde ObjectId ref:User olduğu için mümkünse ObjectId kullan
-    const soforFilter = ObjectId.isValid(userIdRaw)
-      ? new ObjectId(userIdRaw)
-      : userIdRaw;
+    // --- FİLTRE ---
+    const q = {
+      sofor: meId,            // şoför benim olmalı
+      atamaDurumu: "Evet",    // ataması yapılmış olmalı
+    };
 
-    // ---- YEGANE FİLTRE: şoför ben olmalıyım ----
-    const q = { sofor: soforFilter };
+    // Debug yardımcı
+    console.log("isAtamalarim filtre:", JSON.stringify(q));
 
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
@@ -605,4 +609,3 @@ exports.isAtamalarim = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
-
