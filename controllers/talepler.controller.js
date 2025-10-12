@@ -551,3 +551,59 @@ exports.taleplerim = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
+
+
+exports.isAtamalarim = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    // Giriş yapan kullanıcının ID'si
+    const userIdRaw = req.user?._id || req.userId;
+    if (!userIdRaw) {
+      return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
+    }
+
+    // sofor alanı genelde ObjectId ref:User olduğu için mümkünse ObjectId kullan
+    const soforFilter = ObjectId.isValid(userIdRaw)
+      ? new ObjectId(userIdRaw)
+      : userIdRaw;
+
+    // ---- YEGANE FİLTRE: şoför ben olmalıyım ----
+    const q = { sofor: soforFilter };
+
+    // Sayfalama
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sorgu + toplam
+    const [items, total] = await Promise.all([
+      Talepler.find(q)
+        .sort({ transferTarihi: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate([
+          { path: "lokasyon" },
+          { path: "routes" },
+          { path: "sofor", select: userSelectExclude },
+          { path: "arac" },
+          { path: "talepEdenId", select: userSelectExclude },
+          { path: "atamaYapanId", select: userSelectExclude },
+          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
+        ]),
+      Talepler.countDocuments(q),
+    ]);
+
+    // Yanıt şeması
+    return res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+    });
+  } catch (err) {
+    console.error("❌ isAtamalarim listesi alınamadı:", err);
+    return res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
+  }
+};
+
