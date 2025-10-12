@@ -609,7 +609,6 @@ exports.islerim = async (req, res) => {
   }
 };
 
-
 exports.isAtamalarim = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
@@ -642,7 +641,6 @@ exports.isAtamalarim = async (req, res) => {
         .limit(Number(limit))
         .populate([
           { path: "lokasyon" },
-          { path: "routes" },
           { path: "sofor", select: userSelectExclude },
           { path: "arac" },
           { path: "talepEdenId", select: userSelectExclude },
