@@ -495,3 +495,50 @@ exports.aracIsEmri = async (req, res) => {
     res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
+
+exports.taleplerim = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    // Giriş yapan kullanıcı id'si (JWT middleware'den)
+    const userIdRaw = req.user?._id || req.userId;
+    if (!userIdRaw) {
+      return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
+    }
+    const talepEdenId = ObjectId.isValid(userIdRaw) ? new ObjectId(userIdRaw) : userIdRaw;
+
+    // YEGANE filtre: sadece kendi oluşturdukları
+    const q = { talepEdenId };
+
+    // Sayfalama
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Sorgu + toplam
+    const [items, total] = await Promise.all([
+      Talepler.find(q)
+        .sort({ transferTarihi: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate([
+          { path: "lokasyon" },
+          { path: "sofor", select: userSelectExclude },
+          { path: "arac" },
+          { path: "talepEdenId", select: userSelectExclude },
+          { path: "atamaYapanId", select: userSelectExclude },
+          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
+        ]),
+      Talepler.countDocuments(q),
+    ]);
+
+    // Yanıt şeması aynı
+    return res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+    });
+  } catch (err) {
+    console.error("❌ aracIsEmri listesi alınamadı:", err);
+    return res.status(500).json({ message: "Talepler listelenemedi", error: err.message });
+  }
+};
