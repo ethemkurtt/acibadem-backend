@@ -4,9 +4,9 @@ const mongoose = require("mongoose");
 const schema = new mongoose.Schema(
   {
     misafirId: { type: mongoose.Schema.Types.ObjectId, ref: "MisafirTalep", required: true },
-    adSoyad: { type: String, required: true },
-    telefon: { type: String, default: null },
-    aciklama: { type: String, default: null },
+    fullName: { type: String, required: true },
+    phone: { type: String, default: null },
+    description: { type: String, default: null },
   },
   { timestamps: true }
 );
