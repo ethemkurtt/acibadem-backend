@@ -3,8 +3,8 @@ const mongoose = require("mongoose");
 
 const schema = new mongoose.Schema(
   {
-    misafirId: { type: mongoose.Schema.Types.ObjectId, ref: "MisafirTalep", required: true },
-    fullName: { type: String, required: true },
+    misafirId: { type: mongoose.Schema.Types.ObjectId, ref: "MisafirTalep", default: null },
+    fullName: { type: String, default: null },
     phone: { type: String, default: null },
     description: { type: String, default: null },
   },
