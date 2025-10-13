@@ -88,6 +88,9 @@ app.use("/api/sohbet", sohbetRoutes);
 // Yeni eklenen endpoint’ler (CJS):
 app.use("/api/talepler/", taleplerRoutes);
 app.use("/api/hasta-detay", hastaDetayRoutes);
+app.use("/api/personel-detay", personelDetayRoutes);
+app.use("/api/misafir-detay", misafirDetayRoutes);
+app.use("/api/diger-detay", digerDetayRoutes);
 const misafirDetayRoutes = require("./routes/misafirTalepDetay.routes");
 app.use("/misafir-detay", misafirDetayRoutes);
 const personelDetayRoutes = require("./routes/personelTalepDetay.routes");
