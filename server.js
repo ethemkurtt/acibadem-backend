@@ -91,12 +91,6 @@ app.use("/api/hasta-detay", hastaDetayRoutes);
 app.use("/api/personel-detay", personelDetayRoutes);
 app.use("/api/misafir-detay", misafirDetayRoutes);
 app.use("/api/diger-detay", digerDetayRoutes);
-const misafirDetayRoutes = require("./routes/misafirTalepDetay.routes");
-app.use("/misafir-detay", misafirDetayRoutes);
-const personelDetayRoutes = require("./routes/personelTalepDetay.routes");
-app.use("/personel-detay", personelDetayRoutes);
-const digerDetayRoutes = require("./routes/digerTalepDetay.routes");
-app.use("/diger-detay", digerDetayRoutes);
 
 // ---- DB ----
 mongoose
