@@ -5,7 +5,6 @@ const PersonelDetay = require("../models/talepler/personelTalepDetay.model");
 
 // Projendeki gerçek yollarına göre güncelle:
 const Companions = require("../models/hastaTalepModels/companions.model");
-const Routes = require("../models/hastaTalepModels/routes.model");
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const pick = (obj, keys) =>
@@ -14,11 +13,10 @@ const pick = (obj, keys) =>
     return acc;
   }, {});
 
-// -- Yardımcı: companions/routes input'unu normalize et (ID ise direkt, obje ise insert) [CREATE senaryosu]
+// ---------- CREATE senaryosu için normalizer (companions) ----------
 async function ensureCompanionIds(arr, talepId, session) {
   if (!Array.isArray(arr) || !arr.length) return [];
-  const ids = [];
-  const toInsert = [];
+  const ids = [], toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
@@ -37,33 +35,11 @@ async function ensureCompanionIds(arr, talepId, session) {
   return ids;
 }
 
-async function ensureRouteIds(arr, talepId, session) {
-  if (!Array.isArray(arr) || !arr.length) return [];
-  const ids = [];
-  const toInsert = [];
-  for (const r of arr) {
-    if (typeof r === "string" && isId(r)) {
-      ids.push(new mongoose.Types.ObjectId(r));
-    } else if (r && typeof r === "object") {
-      toInsert.push({
-        talep_id: talepId || null,
-        pickup: r.pickup || {},
-        drop: r.drop || {},
-      });
-    }
-  }
-  if (toInsert.length) {
-    const inserted = await Routes.insertMany(toInsert, { session });
-    ids.push(...inserted.map((d) => d._id));
-  }
-  return ids;
-}
-
-// --- UPDATE için tri-state normalizer’lar (undefined -> dokunma, [] -> boşalt, id[]/obj[] -> set)
+// ---------- UPDATE (PUT) için tri-state normalizer (companions) ----------
 async function ensureCompanionIdsForUpdate(arr, talepId, session) {
-  if (arr === undefined) return null;        // hiç dokunma
-  if (!Array.isArray(arr)) return null;      // beklenmeyen format -> dokunma
-  if (arr.length === 0) return [];           // alanı boş liste yap
+  if (arr === undefined) return null;   // dokunma
+  if (!Array.isArray(arr)) return null; // beklenmedik format -> dokunma
+  if (arr.length === 0) return [];      // boşalt
   const ids = [], toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
@@ -78,29 +54,6 @@ async function ensureCompanionIdsForUpdate(arr, talepId, session) {
   }
   if (toInsert.length) {
     const inserted = await Companions.insertMany(toInsert, { session });
-    ids.push(...inserted.map((d) => d._id));
-  }
-  return ids;
-}
-
-async function ensureRouteIdsForUpdate(arr, talepId, session) {
-  if (arr === undefined) return null;
-  if (!Array.isArray(arr)) return null;
-  if (arr.length === 0) return [];
-  const ids = [], toInsert = [];
-  for (const r of arr) {
-    if (typeof r === "string" && isId(r)) {
-      ids.push(new mongoose.Types.ObjectId(r));
-    } else if (r && typeof r === "object") {
-      toInsert.push({
-        talep_id: talepId || null,
-        pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
-        drop: r.drop || r.to || {},
-      });
-    }
-  }
-  if (toInsert.length) {
-    const inserted = await Routes.insertMany(toInsert, { session });
     ids.push(...inserted.map((d) => d._id));
   }
   return ids;
@@ -128,7 +81,7 @@ const TALEP_POPULATE = [
   },
 ];
 
-const DETAY_POPULATE = [{ path: "companions" }, { path: "routes" }];
+const DETAY_POPULATE = [{ path: "companions" }]; // routes kaldırıldı
 
 /** 1) Tek başına PersonelDetay oluştur (opsiyonel talep_id) */
 exports.create = async (req, res) => {
@@ -142,16 +95,27 @@ exports.create = async (req, res) => {
       });
     }
 
-    // gömülü companions/routes gelmişse önce oluştur, sonra id'leri yaz
+    // companions normalize
     const companionIds = await ensureCompanionIds(body.companions, talep_id, null);
-    const routeIds = await ensureRouteIds(body.routes, talep_id, null);
 
-    const fields = ["email", "departman", "soforDurumu", "aciklama"];
+    // Yeni şema alanları
+    const fields = [
+      "email",
+      "departman",
+      "soforDurumu",
+      "alinacakYer",
+      "birakilacakYer",
+      "alinacakTarih",
+      "birakilacakTarih",
+      "aciklama",
+      "il_kodu",
+      "ilce_kodu",
+    ];
+
     const payload = {
       ...pick(body, fields),
       talep_id: talep_id || null,
       companions: companionIds.length ? companionIds : undefined,
-      routes: routeIds.length ? routeIds : undefined,
     };
 
     const doc = await PersonelDetay.create(payload);
@@ -172,7 +136,7 @@ exports.create = async (req, res) => {
   }
 };
 
-/** 2) Birleştirilmiş oluşturma: Talepler + PersonelDetay + (companions/routes hydrate) */
+/** 2) Birleştirilmiş oluşturma: Talepler + PersonelDetay + (companions hydrate) */
 exports.createCombined = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -208,28 +172,34 @@ exports.createCombined = async (req, res) => {
     const talepPayload = pick(srcTalep, talepKeys);
     talepPayload.requestType = "personel"; // tipi garanti et
 
-    // Ortak talebi oluştur
+    // 1) Talep oluştur
     const [talepDoc] = await Talepler.create([talepPayload], { session });
 
-    // companions/routes normalize
-    const companionIds = await ensureCompanionIds(
-      srcDetay.companions || srcTalep.companions,
-      talepDoc._id,
-      session
-    );
-    const routeIds = await ensureRouteIds(
-      srcDetay.routes || srcTalep.routes,
-      talepDoc._id,
-      session
-    );
+    // 2) companions normalize
+    const companionsIn = Array.isArray(srcDetay.companions)
+      ? srcDetay.companions
+      : Array.isArray(srcTalep.companions)
+      ? srcTalep.companions
+      : [];
+    const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
 
-    // Personel tip-özel alanlar (hepsi opsiyonel)
-    const detayKeys = ["email", "departman", "soforDurumu", "aciklama"];
+    // 3) PersonelDetay oluştur (yeni şema alanları)
+    const detayKeys = [
+      "email",
+      "departman",
+      "soforDurumu",
+      "alinacakYer",
+      "birakilacakYer",
+      "alinacakTarih",
+      "birakilacakTarih",
+      "aciklama",
+      "il_kodu",
+      "ilce_kodu",
+    ];
     const detayPayload = {
       ...pick(srcDetay, detayKeys),
       talep_id: talepDoc._id,
-      companions: companionIds.length ? companionIds : undefined,
-      routes: routeIds.length ? routeIds : undefined,
+      companions: companionIds,
     };
 
     const [detayDoc] = await PersonelDetay.create([detayPayload], { session });
@@ -301,7 +271,7 @@ exports.getByTalepId = async (req, res) => {
   }
 };
 
-/** 4) talep_id ile güncelle (upsert=false) — flat + nested gövde desteği, tri-state companions/routes */
+/** 4) talep_id ile GÜNCELLE (ikisini birden) — flat + nested gövde, tri-state companions */
 exports.updateByTalepId = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -318,7 +288,7 @@ exports.updateByTalepId = async (req, res) => {
 
     const body = req.body || {};
 
-    // --- YENİ: Talepler (ortak) alanlarını da güncelle ---
+    // --- Talepler (ortak) alanlarını güncelle ---
     const srcTalep = body.talep || {};
     const talepKeys = [
       "fullName","passportNo","phone","lokasyon","kategori",
@@ -337,20 +307,28 @@ exports.updateByTalepId = async (req, res) => {
       );
     }
 
-    // companions/routes (flat or nested) — mevcut mantık
+    // --- PersonelDetay: companions tri-state + yeni şema alanları ---
     const inDetay = body.detay || {};
     const companionsIn = body.hasOwnProperty("companions") ? body.companions : inDetay.companions;
-    const routesIn     = body.hasOwnProperty("routes") ? body.routes : inDetay.routes;
 
     const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
-    const newRouteIds     = await ensureRouteIdsForUpdate(routesIn, talepId, session);
 
-    const fields = ["email", "departman", "soforDurumu", "aciklama"];
+    const fields = [
+      "email",
+      "departman",
+      "soforDurumu",
+      "alinacakYer",
+      "birakilacakYer",
+      "alinacakTarih",
+      "birakilacakTarih",
+      "aciklama",
+      "il_kodu",
+      "ilce_kodu",
+    ];
     const baseSet = { ...pick(body, fields), ...pick(inDetay, fields) };
 
     const updateDoc = { $set: baseSet };
     if (newCompanionIds !== null) updateDoc.$set.companions = newCompanionIds;
-    if (newRouteIds !== null)     updateDoc.$set.routes     = newRouteIds;
 
     const updated = await PersonelDetay.findOneAndUpdate(
       { talep_id: talepId },
@@ -404,8 +382,6 @@ exports.deleteByTalepId = async (req, res) => {
     }
 
     const deleted = await PersonelDetay.findOneAndDelete({ talep_id: talepId }, { session });
-    // Talepler kaydını silmiyoruz; sadece PersonelDetay'ı kaldırıyoruz (iş kuralına göre değiştirilebilir)
-
     if (!deleted) {
       await session.abortTransaction().catch(() => {});
       session.endSession();

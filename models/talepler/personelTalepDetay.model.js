@@ -18,20 +18,30 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
     // Tip-özel alanlar (hepsi opsiyonel)
     email: { type: String, default: "" },
     departman: { type: String, default: "" },
+
+    companions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Companions",
+        default: undefined,
+      },
+    ],
     soforDurumu: {
       type: String,
       enum: ["Şoförlü", "Şoförsüz"],
       default: null, // boş bırakılabilir
     },
+    alinacakYer: { type: String, default: "" },
+    birakilacakYer: { type: String, default: "" },
+    alinacakTarih: { type: Date, default: null },
+    birakilacakTarih: { type: Date, default: null },
     aciklama: { type: String, default: "" },
-
-    // İlişkiler (opsiyonel, boş dizi)
-    companions: [{ type: mongoose.Schema.Types.ObjectId, ref: "Companions", default: undefined }],
-    routes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Routes", default: undefined }],
+    il_kodu: { type: String, default: "" },
+    ilce_kodu: { type: String, default: "" },
   },
   {
     timestamps: true,
-    minimize: false, 
+    minimize: false,
     strict: true,
   }
 );
