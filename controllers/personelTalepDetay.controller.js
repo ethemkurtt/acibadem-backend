@@ -59,13 +59,40 @@ async function ensureRouteIds(arr, talepId, session) {
   return ids;
 }
 
-// 1) Tek başına PersonelDetay oluştur (opsiyonel talep_id)
+// Ortak populate şemaları
+const TALEP_POPULATE = [
+  { path: "lokasyon" },
+  { path: "arac" },
+  {
+    path: "sofor",
+    select: "-password -resetPasswordToken -resetPasswordExpires -__v",
+  },
+  {
+    path: "talepEdenId",
+    select: "-password -resetPasswordToken -resetPasswordExpires -__v",
+  },
+  {
+    path: "atamaYapanId",
+    select: "-password -resetPasswordToken -resetPasswordExpires -__v",
+  },
+  {
+    path: "lokasyonSonDegistirenId",
+    select: "-password -resetPasswordToken -resetPasswordExpires -__v",
+  },
+];
+
+const DETAY_POPULATE = [{ path: "companions" }, { path: "routes" }];
+
+/** 1) Tek başına PersonelDetay oluştur (opsiyonel talep_id) */
 exports.create = async (req, res) => {
   try {
     const body = req.body || {};
     const { talep_id } = body;
     if (talep_id && !isId(talep_id)) {
-      return res.status(400).json({ ok: false, message: "Geçersiz talep_id" });
+      return res.status(400).json({
+        message: "Geçersiz talep_id",
+        data: { error: "Invalid talep_id format." },
+      });
     }
 
     // gömülü companions/routes gelmişse önce oluştur, sonra id'leri yaz
@@ -81,13 +108,24 @@ exports.create = async (req, res) => {
     };
 
     const doc = await PersonelDetay.create(payload);
-    res.status(201).json({ ok: true, data: doc });
+
+    const populatedDetay = await PersonelDetay.findById(doc._id)
+      .populate(DETAY_POPULATE)
+      .lean();
+
+    return res.status(201).json({
+      message: "Personel detay başarıyla oluşturuldu",
+      data: { talep: null, detay: populatedDetay },
+    });
   } catch (err) {
-    res.status(400).json({ ok: false, message: "Personel detay oluşturulamadı", error: err.message });
+    return res.status(400).json({
+      message: "Personel detay oluşturulamadı",
+      data: { error: err.message },
+    });
   }
 };
 
-// 2) Birleştirilmiş oluşturma: Talepler + PersonelDetay + (companions/routes hydrate)
+/** 2) Birleştirilmiş oluşturma: Talepler + PersonelDetay + (companions/routes hydrate) */
 exports.createCombined = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -95,15 +133,29 @@ exports.createCombined = async (req, res) => {
     const body = req.body || {};
     const isFlat = !body.talep && !body.detay;
 
-    const srcTalep = isFlat ? body : (body.talep || {});
-    const srcDetay = isFlat ? body : (body.detay || {});
+    const srcTalep = isFlat ? body : body.talep || {};
+    const srcDetay = isFlat ? body : body.detay || {};
 
     // Talepler ortak alanlar (hepsi opsiyonel)
     const talepKeys = [
-      "fullName","passportNo","phone","lokasyon","kategori",
-      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
-      "talepDurumu","talepEdenId","isDurumu","atamaYapanId","atamaYapanAdSoyad",
-      "uetdsSeferReferansNo","lokasyonSonDegistirenId","description"
+      "fullName",
+      "passportNo",
+      "phone",
+      "lokasyon",
+      "kategori",
+      "arac",
+      "sofor",
+      "atamaDurumu",
+      "transferTarihi",
+      "transferSaati",
+      "talepDurumu",
+      "talepEdenId",
+      "isDurumu",
+      "atamaYapanId",
+      "atamaYapanAdSoyad",
+      "uetdsSeferReferansNo",
+      "lokasyonSonDegistirenId",
+      "description",
     ];
     const talepPayload = pick(srcTalep, talepKeys);
     talepPayload.requestType = "personel"; // tipi garanti et
@@ -136,41 +188,90 @@ exports.createCombined = async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
-    res.status(201).json({ ok: true, data: { talep: talepDoc, detay: detayDoc } });
+
+    // Dönüşte populate edilmiş ver
+    const populatedTalep = await Talepler.findById(talepDoc._id)
+      .populate(TALEP_POPULATE)
+      .lean();
+    const populatedDetay = await PersonelDetay.findById(detayDoc._id)
+      .populate(DETAY_POPULATE)
+      .lean();
+
+    return res.status(201).json({
+      message: "Personel talep ve detay başarıyla oluşturuldu",
+      data: { talep: populatedTalep, detay: populatedDetay },
+    });
   } catch (err) {
-    await session.abortTransaction();
+    await session.abortTransaction().catch(() => {});
     session.endSession();
-    res.status(400).json({ ok: false, message: "Birleştirilmiş oluşturma başarısız", error: err.message });
+    return res.status(400).json({
+      message: "Birleştirilmiş oluşturma başarısız",
+      data: { error: err.message },
+    });
   }
 };
 
-// 3) talep_id ile getir
+/** 3) talep_id ile getir */
 exports.getByTalepId = async (req, res) => {
   try {
     const { talepId } = req.params;
-    if (!isId(talepId)) return res.status(400).json({ ok: false, message: "Geçersiz talepId" });
+    if (!isId(talepId)) {
+      return res.status(400).json({
+        message: "Geçersiz talepId",
+        data: { error: "Invalid talepId format." },
+      });
+    }
 
-    const doc = await PersonelDetay.findOne({ talep_id: talepId })
-      .populate(["companions", "routes"])
+    const talep = await Talepler.findById(talepId).populate(TALEP_POPULATE).lean();
+    if (!talep) {
+      return res.status(404).json({
+        message: "Talep bulunamadı",
+        data: { talep: null, detay: null },
+      });
+    }
+
+    const detay = await PersonelDetay.findOne({ talep_id: talepId })
+      .populate(DETAY_POPULATE)
       .lean();
 
-    if (!doc) return res.status(404).json({ ok: false, message: "Kayıt bulunamadı" });
-    res.json({ ok: true, data: doc });
+    if (!detay) {
+      return res.status(404).json({
+        message: "Personel detayı bulunamadı",
+        data: { talep, detay: null },
+      });
+    }
+
+    return res.json({
+      message: "Kayıt getirildi",
+      data: { talep, detay },
+    });
   } catch (err) {
-    res.status(500).json({ ok: false, message: "Getirme hatası", error: err.message });
+    return res.status(500).json({
+      message: "Getirme hatası",
+      data: { error: err.message },
+    });
   }
 };
 
-// 4) talep_id ile güncelle (upsert=false)
+/** 4) talep_id ile güncelle (upsert=false) */
 exports.updateByTalepId = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { talepId } = req.params;
-    if (!isId(talepId)) return res.status(400).json({ ok: false, message: "Geçersiz talepId" });
+    if (!isId(talepId)) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(400).json({
+        message: "Geçersiz talepId",
+        data: { error: "Invalid talepId format." },
+      });
+    }
 
     // companions/routes gömülü geldiyse ek işlemler yap
     const body = req.body || {};
-    const companionIds = await ensureCompanionIds(body.companions, talepId, null);
-    const routeIds = await ensureRouteIds(body.routes, talepId, null);
+    const companionIds = await ensureCompanionIds(body.companions, talepId, session);
+    const routeIds = await ensureRouteIds(body.routes, talepId, session);
 
     const fields = ["email", "departman", "soforDurumu", "aciklama"];
     const payload = {
@@ -182,27 +283,83 @@ exports.updateByTalepId = async (req, res) => {
     const updated = await PersonelDetay.findOneAndUpdate(
       { talep_id: talepId },
       payload,
-      { new: true, runValidators: true, upsert: false }
+      { new: true, runValidators: true, upsert: false, session }
     );
 
-    if (!updated) return res.status(404).json({ ok: false, message: "Kayıt bulunamadı" });
-    res.json({ ok: true, data: updated });
+    if (!updated) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(404).json({
+        message: "Kayıt bulunamadı",
+        data: { talep: null, detay: null },
+      });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Güncel populate edilmiş talep + detay döndür
+    const populatedTalep = await Talepler.findById(talepId)
+      .populate(TALEP_POPULATE)
+      .lean();
+    const populatedDetay = await PersonelDetay.findById(updated._id)
+      .populate(DETAY_POPULATE)
+      .lean();
+
+    return res.json({
+      message: "Personel detayı başarıyla güncellendi",
+      data: { talep: populatedTalep, detay: populatedDetay },
+    });
   } catch (err) {
-    res.status(400).json({ ok: false, message: "Güncelleme hatası", error: err.message });
+    await session.abortTransaction().catch(() => {});
+    session.endSession();
+    return res.status(400).json({
+      message: "Güncelleme hatası",
+      data: { error: err.message },
+    });
   }
 };
 
-// 5) talep_id ile sil
+/** 5) talep_id ile sil */
 exports.deleteByTalepId = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { talepId } = req.params;
-    if (!isId(talepId)) return res.status(400).json({ ok: false, message: "Geçersiz talepId" });
+    if (!isId(talepId)) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(400).json({
+        message: "Geçersiz talepId",
+        data: { error: "Invalid talepId format." },
+      });
+    }
 
-    const deleted = await PersonelDetay.findOneAndDelete({ talep_id: talepId });
-    if (!deleted) return res.status(404).json({ ok: false, message: "Kayıt bulunamadı" });
+    const deleted = await PersonelDetay.findOneAndDelete({ talep_id: talepId }, { session });
+    // Talepler kaydını silmiyoruz; sadece PersonelDetay'ı kaldırıyoruz (iş kuralına göre değiştirilebilir)
 
-    res.json({ ok: true, message: "Silindi", talep_id: talepId });
+    if (!deleted) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+      return res.status(404).json({
+        message: "Kayıt bulunamadı",
+        data: { talep: null, detay: null },
+      });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.json({
+      message: "Personel detayı silindi",
+      data: { talep: null, detay: null },
+    });
   } catch (err) {
-    res.status(500).json({ ok: false, message: "Silme hatası", error: err.message });
+    await session.abortTransaction().catch(() => {});
+    session.endSession();
+    return res.status(500).json({
+      message: "Silme hatası",
+      data: { error: err.message },
+    });
   }
 };
