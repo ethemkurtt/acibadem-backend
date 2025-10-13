@@ -9,7 +9,7 @@ const ctrl = require("../controllers/personelTalepDetay.controller");
 // Tek başına personel detay CRUD
 router.post("/", ctrl.create);
 router.get("/:talepId", ctrl.getByTalepId);
-router.put("/combined/:talepId", validateObjectId("talepId"), ctrl.updateByTalepId);
+router.put("/combined/:talepId", ctrl.updateByTalepId);
 
 router.delete("/:talepId", ctrl.deleteByTalepId);
 
