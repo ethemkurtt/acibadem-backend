@@ -1,17 +1,13 @@
-// models/Hastane.js
+// models/hastane/hastane.model.js
 const mongoose = require("mongoose");
 
-const hastaneSchema = new mongoose.Schema(
-  {
-    lokasyon: { type: String, required: true },
-    adres: { type: String, required: true },
+const hastaneSchema = new mongoose.Schema({
+  lokasyon: { type: String, required: true },
+  adres:    { type: String, required: true },
+  il_kodu:  { type: String, default: "" },
+  ilce_kodu:{ type: String, default: "" },
+  kordinat: { type: String, default: "" }, // DİKKAT: 'kordinat'
+}, { timestamps: true });
 
-    // Şehir bilgileri
-    il_kodu: { type: String, default: "" },
-    ilce_kodu: { type: String, default: "" },
-    kordinat: { type: String, default: "" },
-  },
-  { timestamps: true }
-);
-
-module.exports = mongoose.model("Hastane", hastaneSchema);
+// model cache koruması
+module.exports = mongoose.models.Hastane || mongoose.model("Hastane", hastaneSchema);

@@ -103,27 +103,23 @@ exports.deleteHastene = async (req, res) => {
 exports.updateHastane = async (req, res) => {
   try {
     const { id } = req.params;
-    const updated = await Hastane.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true
-    });
 
-    if (!updated) {
-      return res.status(404).json({
-        message: "Hastane bulunamadı",
-        data: null
-      });
-    }
+    // Sadece izin verilen alanlar
+    const allowed = ["lokasyon","adres","il_kodu","ilce_kodu","kordinat"];
+    const update = {};
+    for (const k of allowed) if (k in req.body) update[k] = req.body[k];
 
-    res.json({
-      message: "Hastane başarıyla güncellendi",
-      data: updated
-    });
+    const updated = await Hastane.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: "Hastane bulunamadı", data: null });
+
+    res.json({ message: "Hastane başarıyla güncellendi", data: updated });
   } catch (err) {
-    res.status(400).json({
-      message: "Güncelleme hatası",
-      data: { error: err.message }
-    });
+    res.status(400).json({ message: "Güncelleme hatası", data: { error: err.message } });
   }
 };
 
