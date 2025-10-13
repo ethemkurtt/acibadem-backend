@@ -65,7 +65,6 @@ app.use("/api/havalimani", havalimaniRoutes);
 app.use("/api/hastane", hastaneRoutes);
 app.use("/api/lokasyon", lokasyonRoutes);
 app.use("/api/ulke", ulkeRoutes);
-app.use("/api/personel-talep", personelTalepRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/departman", departmanRoutes);
 app.use("/api/roles", roleRoutes);

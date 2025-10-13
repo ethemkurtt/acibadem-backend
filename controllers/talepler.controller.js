@@ -279,7 +279,7 @@ exports.getFullById = async (req, res) => {
         .lean();
     } else if (talep.requestType === "personel") {
       detay = await PersonelDetay.findOne({ talep_id: id })
-        .populate([{ path: "companions" }, { path: "routes" }])
+        .populate([{ path: "companions" }])
         .lean();
     } else if (talep.requestType === "misafir") {
       // MisafirDetay şemanda ref'ler "MisafirCompanions" / "MisafirRoutes" / "MisafirNotificationPerson" ise
