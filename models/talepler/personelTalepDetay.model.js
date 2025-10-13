@@ -38,7 +38,7 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
 
     alinacak_il_kodu: { type: String, default: "" },
     alinacak_ilce_kodu: { type: String, default: "" },
-    birakilacak_ilce_kodu: { type: String, default: "" },
+    birakilacak_il_kodu: { type: String, default: "" },
     birakilacak_ilce_kodu: { type: String, default: "" },
     alinacak_aciklama: { type: String, default: "" },
     birakilacak_aciklama: { type: String, default: "" },
@@ -46,6 +46,7 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
     birakilacak_kisi_sayisi: { type: String, default: "" },
     alinacak_kisi_sayisi: { type: String, default: "" },
   },
+
   {
     timestamps: true,
     minimize: false,

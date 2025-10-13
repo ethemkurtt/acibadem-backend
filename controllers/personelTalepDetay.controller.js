@@ -16,7 +16,8 @@ const pick = (obj, keys) =>
 // ---------- CREATE senaryosu için normalizer (companions) ----------
 async function ensureCompanionIds(arr, talepId, session) {
   if (!Array.isArray(arr) || !arr.length) return [];
-  const ids = [], toInsert = [];
+  const ids = [],
+    toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
@@ -37,10 +38,11 @@ async function ensureCompanionIds(arr, talepId, session) {
 
 // ---------- UPDATE (PUT) için tri-state normalizer (companions) ----------
 async function ensureCompanionIdsForUpdate(arr, talepId, session) {
-  if (arr === undefined) return null;   // dokunma
+  if (arr === undefined) return null; // dokunma
   if (!Array.isArray(arr)) return null; // beklenmedik format -> dokunma
-  if (arr.length === 0) return [];      // boşalt
-  const ids = [], toInsert = [];
+  if (arr.length === 0) return []; // boşalt
+  const ids = [],
+    toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
@@ -96,7 +98,11 @@ exports.create = async (req, res) => {
     }
 
     // companions normalize
-    const companionIds = await ensureCompanionIds(body.companions, talep_id, null);
+    const companionIds = await ensureCompanionIds(
+      body.companions,
+      talep_id,
+      null
+    );
 
     // Yeni şema alanları
     const fields = [
@@ -181,7 +187,11 @@ exports.createCombined = async (req, res) => {
       : Array.isArray(srcTalep.companions)
       ? srcTalep.companions
       : [];
-    const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
+    const companionIds = await ensureCompanionIds(
+      companionsIn,
+      talepDoc._id,
+      session
+    );
 
     // 3) PersonelDetay oluştur (yeni şema alanları)
     const detayKeys = [
@@ -240,7 +250,9 @@ exports.getByTalepId = async (req, res) => {
       });
     }
 
-    const talep = await Talepler.findById(talepId).populate(TALEP_POPULATE).lean();
+    const talep = await Talepler.findById(talepId)
+      .populate(TALEP_POPULATE)
+      .lean();
     if (!talep) {
       return res.status(404).json({
         message: "Talep bulunamadı",
@@ -291,11 +303,25 @@ exports.updateByTalepId = async (req, res) => {
     // --- Talepler (ortak) alanlarını güncelle ---
     const srcTalep = body.talep || {};
     const talepKeys = [
-      "fullName","passportNo","phone","lokasyon","kategori",
-      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
-      "talepDurumu","talepEdenId","isDurumu","atamaYapanId",
-      "atamaYapanAdSoyad","uetdsSeferReferansNo","lokasyonSonDegistirenId",
-      "description","talepEdenAdSoyad"
+      "fullName",
+      "passportNo",
+      "phone",
+      "lokasyon",
+      "kategori",
+      "arac",
+      "sofor",
+      "atamaDurumu",
+      "transferTarihi",
+      "transferSaati",
+      "talepDurumu",
+      "talepEdenId",
+      "isDurumu",
+      "atamaYapanId",
+      "atamaYapanAdSoyad",
+      "uetdsSeferReferansNo",
+      "lokasyonSonDegistirenId",
+      "description",
+      "talepEdenAdSoyad",
     ];
     const talepSet = pick(srcTalep, talepKeys);
     if (Object.keys(talepSet).length) {
@@ -309,21 +335,33 @@ exports.updateByTalepId = async (req, res) => {
 
     // --- PersonelDetay: companions tri-state + yeni şema alanları ---
     const inDetay = body.detay || {};
-    const companionsIn = body.hasOwnProperty("companions") ? body.companions : inDetay.companions;
+    const companionsIn = body.hasOwnProperty("companions")
+      ? body.companions
+      : inDetay.companions;
 
-    const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
+    const newCompanionIds = await ensureCompanionIdsForUpdate(
+      companionsIn,
+      talepId,
+      session
+    );
 
     const fields = [
       "email",
       "departman",
+      "aciklama",
       "soforDurumu",
       "alinacakYer",
       "birakilacakYer",
       "alinacakTarih",
       "birakilacakTarih",
-      "aciklama",
-      "il_kodu",
-      "ilce_kodu",
+      "alinacak_il_kodu",
+      "alinacak_ilce_kodu",
+      "birakilacak_ilce_kodu",
+      "birakilacak_il_kodu",
+      "alinacak_aciklama",
+      "birakilacak_aciklama",
+      "birakilacak_kisi_sayisi",
+      "alinacak_kisi_sayisi",
     ];
     const baseSet = { ...pick(body, fields), ...pick(inDetay, fields) };
 
@@ -349,8 +387,12 @@ exports.updateByTalepId = async (req, res) => {
     session.endSession();
 
     // Dönüşte populate
-    const populatedTalep = await Talepler.findById(talepId).populate(TALEP_POPULATE).lean();
-    const populatedDetay = await PersonelDetay.findById(updated._id).populate(DETAY_POPULATE).lean();
+    const populatedTalep = await Talepler.findById(talepId)
+      .populate(TALEP_POPULATE)
+      .lean();
+    const populatedDetay = await PersonelDetay.findById(updated._id)
+      .populate(DETAY_POPULATE)
+      .lean();
 
     return res.json({
       message: "Personel detayı başarıyla güncellendi",
@@ -381,7 +423,10 @@ exports.deleteByTalepId = async (req, res) => {
       });
     }
 
-    const deleted = await PersonelDetay.findOneAndDelete({ talep_id: talepId }, { session });
+    const deleted = await PersonelDetay.findOneAndDelete(
+      { talep_id: talepId },
+      { session }
+    );
     if (!deleted) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
