@@ -46,9 +46,10 @@ const TaleplerSchema = new mongoose.Schema(
 
     isDurumu: {
       type: String,
-      enum: ["Bekliyor", "Başladı", "Tamamlandı","İptal"],
+      enum: ["Bekliyor", "Başladı", "Tamamlandı", "İptal"],
       default: null,
     },
+    iptalNedeni: { type: String, default: "" },
 
     atamaYapanId: {
       type: mongoose.Schema.Types.ObjectId,
