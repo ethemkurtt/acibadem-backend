@@ -14,7 +14,7 @@ const pick = (obj, keys) =>
     return acc;
   }, {});
 
-// -- Yardımcı: companions/routes input'unu normalize et (ID ise direkt, obje ise insert)
+// -- Yardımcı: companions/routes input'unu normalize et (ID ise direkt, obje ise insert) [CREATE senaryosu]
 async function ensureCompanionIds(arr, talepId, session) {
   if (!Array.isArray(arr) || !arr.length) return [];
   const ids = [];
@@ -49,6 +49,53 @@ async function ensureRouteIds(arr, talepId, session) {
         talep_id: talepId || null,
         pickup: r.pickup || {},
         drop: r.drop || {},
+      });
+    }
+  }
+  if (toInsert.length) {
+    const inserted = await Routes.insertMany(toInsert, { session });
+    ids.push(...inserted.map((d) => d._id));
+  }
+  return ids;
+}
+
+// --- UPDATE için tri-state normalizer’lar (undefined -> dokunma, [] -> boşalt, id[]/obj[] -> set)
+async function ensureCompanionIdsForUpdate(arr, talepId, session) {
+  if (arr === undefined) return null;        // hiç dokunma
+  if (!Array.isArray(arr)) return null;      // beklenmeyen format -> dokunma
+  if (arr.length === 0) return [];           // alanı boş liste yap
+  const ids = [], toInsert = [];
+  for (const c of arr) {
+    if (typeof c === "string" && isId(c)) {
+      ids.push(new mongoose.Types.ObjectId(c));
+    } else if (c && typeof c === "object") {
+      toInsert.push({
+        talep_id: talepId || null,
+        fullName: c.fullName || "",
+        passportNo: c.passportNo || "",
+      });
+    }
+  }
+  if (toInsert.length) {
+    const inserted = await Companions.insertMany(toInsert, { session });
+    ids.push(...inserted.map((d) => d._id));
+  }
+  return ids;
+}
+
+async function ensureRouteIdsForUpdate(arr, talepId, session) {
+  if (arr === undefined) return null;
+  if (!Array.isArray(arr)) return null;
+  if (arr.length === 0) return [];
+  const ids = [], toInsert = [];
+  for (const r of arr) {
+    if (typeof r === "string" && isId(r)) {
+      ids.push(new mongoose.Types.ObjectId(r));
+    } else if (r && typeof r === "object") {
+      toInsert.push({
+        talep_id: talepId || null,
+        pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
+        drop: r.drop || r.to || {},
       });
     }
   }
@@ -156,6 +203,7 @@ exports.createCombined = async (req, res) => {
       "uetdsSeferReferansNo",
       "lokasyonSonDegistirenId",
       "description",
+      "talepEdenAdSoyad",
     ];
     const talepPayload = pick(srcTalep, talepKeys);
     talepPayload.requestType = "personel"; // tipi garanti et
@@ -253,7 +301,7 @@ exports.getByTalepId = async (req, res) => {
   }
 };
 
-/** 4) talep_id ile güncelle (upsert=false) */
+/** 4) talep_id ile güncelle (upsert=false) — flat + nested gövde desteği, tri-state companions/routes */
 exports.updateByTalepId = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -268,21 +316,30 @@ exports.updateByTalepId = async (req, res) => {
       });
     }
 
-    // companions/routes gömülü geldiyse ek işlemler yap
     const body = req.body || {};
-    const companionIds = await ensureCompanionIds(body.companions, talepId, session);
-    const routeIds = await ensureRouteIds(body.routes, talepId, session);
+    const inDetay = body.detay || {};
+    // hem flat (body.companions) hem nested (body.detay.companions) destekle
+    const companionsIn = body.hasOwnProperty("companions") ? body.companions : inDetay.companions;
+    const routesIn     = body.hasOwnProperty("routes") ? body.routes : inDetay.routes;
 
+    // tri-state normalizer
+    const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
+    const newRouteIds     = await ensureRouteIdsForUpdate(routesIn, talepId, session);
+
+    // tip-özel alanlar: flat veya nested’ten gelenleri topla
     const fields = ["email", "departman", "soforDurumu", "aciklama"];
-    const payload = {
+    const baseSet = {
       ...pick(body, fields),
+      ...pick(inDetay, fields),
     };
-    if (companionIds.length) payload.companions = companionIds;
-    if (routeIds.length) payload.routes = routeIds;
+
+    const updateDoc = { $set: baseSet };
+    if (newCompanionIds !== null) updateDoc.$set.companions = newCompanionIds; // [] olabilir
+    if (newRouteIds !== null)     updateDoc.$set.routes     = newRouteIds;     // [] olabilir
 
     const updated = await PersonelDetay.findOneAndUpdate(
       { talep_id: talepId },
-      payload,
+      updateDoc,
       { new: true, runValidators: true, upsert: false, session }
     );
 
