@@ -52,6 +52,9 @@ const sohbetRoutes          = require("./routes/sohbet.routes");
 // Yeni eklediklerin:
 const taleplerRoutes        = require("./routes/talepler.routes");
 const hastaDetayRoutes      = require("./routes/hastaTalepDetay.routes");
+const personelDetayRoutes      = require("./routes/personelTalepDetay.routes");
+const misafirDetayRoutes      = require("./routes/misafirTalepDetay.routes");
+const digerDetayRoutes      = require("./routes/digerTalepDetay.routes");
 
 // ---- Route mounts ----
 // /api kökü
