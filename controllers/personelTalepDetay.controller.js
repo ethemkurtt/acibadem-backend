@@ -317,25 +317,40 @@ exports.updateByTalepId = async (req, res) => {
     }
 
     const body = req.body || {};
+
+    // --- YENİ: Talepler (ortak) alanlarını da güncelle ---
+    const srcTalep = body.talep || {};
+    const talepKeys = [
+      "fullName","passportNo","phone","lokasyon","kategori",
+      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
+      "talepDurumu","talepEdenId","isDurumu","atamaYapanId",
+      "atamaYapanAdSoyad","uetdsSeferReferansNo","lokasyonSonDegistirenId",
+      "description","talepEdenAdSoyad"
+    ];
+    const talepSet = pick(srcTalep, talepKeys);
+    if (Object.keys(talepSet).length) {
+      talepSet.requestType = "personel"; // tipi güvene al
+      await Talepler.findByIdAndUpdate(
+        talepId,
+        { $set: talepSet },
+        { new: true, session, runValidators: true }
+      );
+    }
+
+    // companions/routes (flat or nested) — mevcut mantık
     const inDetay = body.detay || {};
-    // hem flat (body.companions) hem nested (body.detay.companions) destekle
     const companionsIn = body.hasOwnProperty("companions") ? body.companions : inDetay.companions;
     const routesIn     = body.hasOwnProperty("routes") ? body.routes : inDetay.routes;
 
-    // tri-state normalizer
     const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
     const newRouteIds     = await ensureRouteIdsForUpdate(routesIn, talepId, session);
 
-    // tip-özel alanlar: flat veya nested’ten gelenleri topla
     const fields = ["email", "departman", "soforDurumu", "aciklama"];
-    const baseSet = {
-      ...pick(body, fields),
-      ...pick(inDetay, fields),
-    };
+    const baseSet = { ...pick(body, fields), ...pick(inDetay, fields) };
 
     const updateDoc = { $set: baseSet };
-    if (newCompanionIds !== null) updateDoc.$set.companions = newCompanionIds; // [] olabilir
-    if (newRouteIds !== null)     updateDoc.$set.routes     = newRouteIds;     // [] olabilir
+    if (newCompanionIds !== null) updateDoc.$set.companions = newCompanionIds;
+    if (newRouteIds !== null)     updateDoc.$set.routes     = newRouteIds;
 
     const updated = await PersonelDetay.findOneAndUpdate(
       { talep_id: talepId },
@@ -355,13 +370,9 @@ exports.updateByTalepId = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // Güncel populate edilmiş talep + detay döndür
-    const populatedTalep = await Talepler.findById(talepId)
-      .populate(TALEP_POPULATE)
-      .lean();
-    const populatedDetay = await PersonelDetay.findById(updated._id)
-      .populate(DETAY_POPULATE)
-      .lean();
+    // Dönüşte populate
+    const populatedTalep = await Talepler.findById(talepId).populate(TALEP_POPULATE).lean();
+    const populatedDetay = await PersonelDetay.findById(updated._id).populate(DETAY_POPULATE).lean();
 
     return res.json({
       message: "Personel detayı başarıyla güncellendi",
