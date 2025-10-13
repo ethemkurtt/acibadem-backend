@@ -16,8 +16,7 @@ const pick = (obj, keys) =>
 // ---------- CREATE senaryosu için normalizer (companions) ----------
 async function ensureCompanionIds(arr, talepId, session) {
   if (!Array.isArray(arr) || !arr.length) return [];
-  const ids = [],
-    toInsert = [];
+  const ids = [], toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
@@ -38,11 +37,10 @@ async function ensureCompanionIds(arr, talepId, session) {
 
 // ---------- UPDATE (PUT) için tri-state normalizer (companions) ----------
 async function ensureCompanionIdsForUpdate(arr, talepId, session) {
-  if (arr === undefined) return null; // dokunma
+  if (arr === undefined) return null;   // dokunma
   if (!Array.isArray(arr)) return null; // beklenmedik format -> dokunma
-  if (arr.length === 0) return []; // boşalt
-  const ids = [],
-    toInsert = [];
+  if (arr.length === 0) return [];      // boşalt
+  const ids = [], toInsert = [];
   for (const c of arr) {
     if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
@@ -98,24 +96,26 @@ exports.create = async (req, res) => {
     }
 
     // companions normalize
-    const companionIds = await ensureCompanionIds(
-      body.companions,
-      talep_id,
-      null
-    );
+    const companionIds = await ensureCompanionIds(body.companions, talep_id, null);
 
     // Yeni şema alanları
     const fields = [
       "email",
       "departman",
+      "aciklama",
       "soforDurumu",
       "alinacakYer",
       "birakilacakYer",
       "alinacakTarih",
       "birakilacakTarih",
-      "aciklama",
-      "il_kodu",
-      "ilce_kodu",
+      "alinacak_il_kodu",
+      "alinacak_ilce_kodu",
+      "birakilacak_il_kodu",
+      "birakilacak_ilce_kodu",
+      "alinacak_aciklama",
+      "birakilacak_aciklama",
+      "alinacak_kisi_sayisi",
+      "birakilacak_kisi_sayisi",
     ];
 
     const payload = {
@@ -176,7 +176,7 @@ exports.createCombined = async (req, res) => {
       "talepEdenAdSoyad",
     ];
     const talepPayload = pick(srcTalep, talepKeys);
-    talepPayload.requestType = "personel"; // tipi garanti et
+    talepPayload.requestType = "personel"; // garanti et
 
     // 1) Talep oluştur
     const [talepDoc] = await Talepler.create([talepPayload], { session });
@@ -187,24 +187,26 @@ exports.createCombined = async (req, res) => {
       : Array.isArray(srcTalep.companions)
       ? srcTalep.companions
       : [];
-    const companionIds = await ensureCompanionIds(
-      companionsIn,
-      talepDoc._id,
-      session
-    );
+    const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
 
     // 3) PersonelDetay oluştur (yeni şema alanları)
     const detayKeys = [
       "email",
       "departman",
+      "aciklama",
       "soforDurumu",
       "alinacakYer",
       "birakilacakYer",
       "alinacakTarih",
       "birakilacakTarih",
-      "aciklama",
-      "il_kodu",
-      "ilce_kodu",
+      "alinacak_il_kodu",
+      "alinacak_ilce_kodu",
+      "birakilacak_il_kodu",
+      "birakilacak_ilce_kodu",
+      "alinacak_aciklama",
+      "birakilacak_aciklama",
+      "alinacak_kisi_sayisi",
+      "birakilacak_kisi_sayisi",
     ];
     const detayPayload = {
       ...pick(srcDetay, detayKeys),
@@ -303,25 +305,11 @@ exports.updateByTalepId = async (req, res) => {
     // --- Talepler (ortak) alanlarını güncelle ---
     const srcTalep = body.talep || {};
     const talepKeys = [
-      "fullName",
-      "passportNo",
-      "phone",
-      "lokasyon",
-      "kategori",
-      "arac",
-      "sofor",
-      "atamaDurumu",
-      "transferTarihi",
-      "transferSaati",
-      "talepDurumu",
-      "talepEdenId",
-      "isDurumu",
-      "atamaYapanId",
-      "atamaYapanAdSoyad",
-      "uetdsSeferReferansNo",
-      "lokasyonSonDegistirenId",
-      "description",
-      "talepEdenAdSoyad",
+      "fullName","passportNo","phone","lokasyon","kategori",
+      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
+      "talepDurumu","talepEdenId","isDurumu","atamaYapanId",
+      "atamaYapanAdSoyad","uetdsSeferReferansNo","lokasyonSonDegistirenId",
+      "description","talepEdenAdSoyad"
     ];
     const talepSet = pick(srcTalep, talepKeys);
     if (Object.keys(talepSet).length) {
@@ -339,11 +327,7 @@ exports.updateByTalepId = async (req, res) => {
       ? body.companions
       : inDetay.companions;
 
-    const newCompanionIds = await ensureCompanionIdsForUpdate(
-      companionsIn,
-      talepId,
-      session
-    );
+    const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
 
     const fields = [
       "email",
@@ -356,12 +340,12 @@ exports.updateByTalepId = async (req, res) => {
       "birakilacakTarih",
       "alinacak_il_kodu",
       "alinacak_ilce_kodu",
-      "birakilacak_ilce_kodu",
       "birakilacak_il_kodu",
+      "birakilacak_ilce_kodu",
       "alinacak_aciklama",
       "birakilacak_aciklama",
-      "birakilacak_kisi_sayisi",
       "alinacak_kisi_sayisi",
+      "birakilacak_kisi_sayisi",
     ];
     const baseSet = { ...pick(body, fields), ...pick(inDetay, fields) };
 

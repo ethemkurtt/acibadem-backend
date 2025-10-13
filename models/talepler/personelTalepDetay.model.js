@@ -11,7 +11,7 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
     talep_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Talepler",
-      default: null, // boş bırakılabilir
+      default: null,
       index: true,
     },
 
@@ -19,6 +19,7 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
     email: { type: String, default: "" },
     departman: { type: String, default: "" },
     aciklama: { type: String, default: "" },
+
     companions: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -26,11 +27,13 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
         default: undefined,
       },
     ],
+
     soforDurumu: {
       type: String,
       enum: ["Şoförlü", "Şoförsüz"],
-      default: null, // boş bırakılabilir
+      default: null,
     },
+
     alinacakYer: { type: String, default: "" },
     birakilacakYer: { type: String, default: "" },
     alinacakTarih: { type: Date, default: null },
@@ -40,13 +43,13 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
     alinacak_ilce_kodu: { type: String, default: "" },
     birakilacak_il_kodu: { type: String, default: "" },
     birakilacak_ilce_kodu: { type: String, default: "" },
+
     alinacak_aciklama: { type: String, default: "" },
     birakilacak_aciklama: { type: String, default: "" },
-    birakilacak_aciklama: { type: String, default: "" },
+
     birakilacak_kisi_sayisi: { type: String, default: "" },
     alinacak_kisi_sayisi: { type: String, default: "" },
   },
-
   {
     timestamps: true,
     minimize: false,
@@ -55,8 +58,7 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
 );
 
 /**
- * talep_id varsa benzersiz olsun; yoksa (null/eksik) bir şey dayatmasın.
- * partial index ile sağlıyoruz.
+ * talep_id varsa benzersiz olsun; yoksa (null/eksik) dayatma yapmasın.
  */
 PersonelTalepDetaySchema.index(
   { talep_id: 1 },
