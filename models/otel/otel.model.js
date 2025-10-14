@@ -2,37 +2,22 @@
 const mongoose = require("mongoose");
 
 const otelSchema = new mongoose.Schema({
-  otelAdi: String,
-  lokasyon: String,
-  rezervasyonEmail: String,
-  yetkiliKisi: String,
-  yetkiliIletisim: String,
-  adres: String,
-  firmaUnvani: String,
-  vergiDairesi: String,
-  vergiNo: String,
+  otelAdi:          { type: String, trim: true },
+  lokasyon:         { type: String, trim: true },
+  rezervasyonEmail: { type: String, trim: true },
+  yetkiliKisi:      { type: String, trim: true },
+  yetkiliIletisim:  { type: String, trim: true },
+  adres:            { type: String, trim: true },
+  firmaUnvani:      { type: String, trim: true },
+  vergiDairesi:     { type: String, trim: true },
+  vergiNo:          { type: String, trim: true },
 
-  // Yeni alanlar:
-  sehirId:   { type: Number, min: 1, index: true },     // örn: 34
-  sehirName: { type: String, trim: true }                // örn: "İstanbul"
+  // Yeni alanlar (hepsi opsiyonel)
+  il_kodu:   { type: Number, min: 1, index: true }, // örn: 34
+  ilce_kodu: { type: Number, min: 1, index: true }, // örn: 3402
+  kordinat:  { type: String, trim: true }           // örn: "41.0082,28.9784" veya Google Maps URL
 }, { timestamps: true });
 
-// (Opsiyonel) sehirId -> sehirName doğrulama/otomatik doldurma
-// Yoruma alırsan manuel girersin.
-// Not: Döngüye girmemesi için minimal sorgu.
-otelSchema.pre("save", async function(next) {
-  // sehirId varsa ve sehirName boşsa otomatik doldur
-  if (this.isModified("sehirId") && this.sehirId && !this.sehirName) {
-    try {
-      const Sehir = mongoose.model("Sehir"); // models/Sehir.js olmalı
-      const s = await Sehir.findOne({ sehirId: this.sehirId }).lean();
-      if (!s) return next(new Error("Geçersiz sehirId (Sehir bulunamadı)"));
-      this.sehirName = s.name;
-    } catch (e) {
-      return next(e);
-    }
-  }
-  next();
-});
+// sehirId/sehirName ile ilgili hook'lar kaldırıldı
 
 module.exports = mongoose.model("Otel", otelSchema);
