@@ -1,9 +1,15 @@
 // controllers/otel.controller.js
-const Otel = require("../models/otel/otel.model");
+const {
+  Types: { ObjectId },
+} = require("mongoose");
+
+// Projendeki gerçek modele göre yolu doğrula:
+const Otel = require("../models/otel/otel.model"); // Gerekirse: require("../models/Otel")
 const XLSX = require("xlsx");
 const path = require("path");
 
-// ---- küçük yardımcılar ----
+/* ----------------------------- Yardımcılar ----------------------------- */
+
 const toIntOrUndefined = (v) => {
   if (v === null || v === undefined) return undefined;
   const s = String(v).trim();
@@ -18,10 +24,17 @@ const emptyToUndefined = (v) => {
   return s === "" ? undefined : s;
 };
 
+const toObjectIdOrUndefined = (v) => {
+  if (v === null || v === undefined) return undefined;
+  const s = String(v).trim();
+  return ObjectId.isValid(s) ? new ObjectId(s) : undefined;
+};
+
 // Yalnızca izin verilen alanları al + tipleri düzenle
 const buildOtelPayload = (src = {}) => ({
   otelAdi:          emptyToUndefined(src.otelAdi),
-  lokasyon:         emptyToUndefined(src.lokasyon),
+  // lokasyon mutlaka ObjectId olmalı; isim geldiyse undefined kalır (populate çalışmaz)
+  lokasyon:         toObjectIdOrUndefined(src.lokasyon),
   rezervasyonEmail: emptyToUndefined(src.rezervasyonEmail),
   yetkiliKisi:      emptyToUndefined(src.yetkiliKisi),
   yetkiliIletisim:  emptyToUndefined(src.yetkiliIletisim),
@@ -31,12 +44,15 @@ const buildOtelPayload = (src = {}) => ({
   vergiNo:          emptyToUndefined(src.vergiNo),
 
   // yeni alanlar (opsiyonel)
-  il_kodu:   toIntOrUndefined(src.il_kodu),
-  ilce_kodu: toIntOrUndefined(src.ilce_kodu),
-  kordinat:  emptyToUndefined(src.kordinat),
+  il_kodu:          toIntOrUndefined(src.il_kodu),
+  ilce_kodu:        toIntOrUndefined(src.ilce_kodu),
+  kordinat:         emptyToUndefined(src.kordinat),
 });
 
-// 🟢 Excel'den toplu otel içe aktarma
+// Tek yerde kullanacağımız populate tanımı
+const LOKASYON_POPULATE = { path: "lokasyon", select: "ad adres sehirName" };
+
+/* ------------------------- Excel'den Toplu İçe Aktar ------------------------- */
 exports.importOtellerFromExcel = async (req, res) => {
   try {
     const filePath = path.join(
@@ -54,17 +70,17 @@ exports.importOtellerFromExcel = async (req, res) => {
 
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-    // Burada kolon adlarını Excel'ine göre ayarla.
-    // İL/İLÇE için kolonu yoksa boş bırakılır.
+    // NOT: Excel'de "LOKASYON" kolonu isim ise ObjectId'a çeviremez.
+    // ID taşımıyorsa burada isim->ID eşlemesi yapman gerekir (Lokasyon.findOne({ad})) (opsiyonel).
     const mapped = rows.map((row) =>
       buildOtelPayload({
         otelAdi:          row["OTEL ADI"],
-        lokasyon:         row["LOKASYON"],
+        lokasyon:         row["LOKASYON"], // ID beklenir. İsimse undefined kalır.
         rezervasyonEmail: row["REZERVASYON MAİL ADRESİ"],
         yetkiliKisi:      row["YETKİLİ KİŞİ"],
         yetkiliIletisim:  row["YETKİLİ KİŞİ İLETİŞİM"],
         adres:            row["OTEL AÇIK ADRES"],
-        firmaUnvani:      row["FİRMA UNVANI "], // Excel'de sondaki boşluk varsa
+        firmaUnvani:      row["FİRMA UNVANI "], // Excel'de sondaki boşluk olabilir
         vergiDairesi:     row["VERGİ DAİRESİ"],
         vergiNo:          row["VERGİ NUMARASI"],
 
@@ -94,14 +110,18 @@ exports.importOtellerFromExcel = async (req, res) => {
   }
 };
 
-// 🟢 Otel oluştur
+/* --------------------------------- CREATE --------------------------------- */
 exports.createOtel = async (req, res) => {
   try {
     const payload = buildOtelPayload(req.body);
     const otel = await Otel.create(payload);
+
+    // Oluşturduktan sonra populate edip dönelim
+    const populated = await Otel.findById(otel._id).populate(LOKASYON_POPULATE).lean();
+
     return res.status(201).json({
       message: "Otel başarıyla oluşturuldu",
-      data: otel,
+      data: populated,
     });
   } catch (err) {
     const status = err?.code === 11000 ? 409 : 400;
@@ -112,14 +132,18 @@ exports.createOtel = async (req, res) => {
   }
 };
 
-// 🟢 Tüm otelleri getir (opsiyonel filtre: il_kodu, ilce_kodu)
+/* ---------------------------------- LIST ---------------------------------- */
 exports.getOteller = async (req, res) => {
   try {
     const q = {};
     if (req.query.il_kodu)   q.il_kodu   = toIntOrUndefined(req.query.il_kodu);
     if (req.query.ilce_kodu) q.ilce_kodu = toIntOrUndefined(req.query.ilce_kodu);
 
-    const oteller = await Otel.find(q).sort({ createdAt: -1 });
+    const oteller = await Otel.find(q)
+      .sort({ createdAt: -1 })
+      .populate(LOKASYON_POPULATE)
+      .lean();
+
     return res.json({
       message: "Oteller başarıyla getirildi",
       data: oteller,
@@ -132,10 +156,13 @@ exports.getOteller = async (req, res) => {
   }
 };
 
-// 🟢 ID ile otel getir
+/* ---------------------------------- READ ---------------------------------- */
 exports.getOtelById = async (req, res) => {
   try {
-    const otel = await Otel.findById(req.params.id);
+    const otel = await Otel.findById(req.params.id)
+      .populate(LOKASYON_POPULATE)
+      .lean();
+
     if (!otel) {
       return res.status(404).json({
         message: "Otel bulunamadı",
@@ -154,14 +181,17 @@ exports.getOtelById = async (req, res) => {
   }
 };
 
-// 🟢 Otel güncelle
+/* --------------------------------- UPDATE --------------------------------- */
 exports.updateOtel = async (req, res) => {
   try {
     const payload = buildOtelPayload(req.body);
+
     const updated = await Otel.findByIdAndUpdate(req.params.id, payload, {
       new: true,
       runValidators: true,
-    });
+    })
+      .populate(LOKASYON_POPULATE)
+      .lean();
 
     if (!updated) {
       return res.status(404).json({
@@ -182,10 +212,13 @@ exports.updateOtel = async (req, res) => {
   }
 };
 
-// 🟢 Otel sil
+/* --------------------------------- DELETE --------------------------------- */
 exports.deleteOtel = async (req, res) => {
   try {
-    const deleted = await Otel.findByIdAndDelete(req.params.id);
+    const deleted = await Otel.findByIdAndDelete(req.params.id)
+      .populate(LOKASYON_POPULATE)
+      .lean();
+
     if (!deleted) {
       return res.status(404).json({
         message: "Otel bulunamadı",
