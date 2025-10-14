@@ -7,11 +7,12 @@ const {
   deleteOtel,
   getOtelById,
   importOtellerFromExcel,
+  resetAllOtelLokasyon,
 } = require("../controllers/otel.controller");
 
 // 📦 Excel'den tek seferlik içe aktarım
 router.post("/import", importOtellerFromExcel);
-
+router.post("/oteller/reset-lokasyon", resetAllOtelLokasyon);
 // ➕ Yeni otel ekle
 router.post("/", createOtel);
 

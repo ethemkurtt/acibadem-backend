@@ -236,3 +236,25 @@ exports.deleteOtel = async (req, res) => {
     });
   }
 };
+const Otel = require("../models/otel/otel.model");
+
+// 🛑 Dikkat: Tüm otellerin lokasyonunu null yapar!
+exports.resetAllOtelLokasyon = async (req, res) => {
+  try {
+    // (Opsiyonel) basit bir güvenlik: admin kontrolü
+    // if (!req.user || req.user.role !== 'admin') {
+    //   return res.status(403).json({ message: "Yetkisiz işlem" });
+    // }
+
+    const result = await Otel.updateMany({}, { $set: { lokasyon: null } });
+    return res.json({
+      message: "Tüm otellerin lokasyonları sıfırlandı",
+      data: { matched: result.matchedCount ?? result.n, modified: result.modifiedCount ?? result.nModified }
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Sıfırlama hatası",
+      data: { error: err.message },
+    });
+  }
+};
