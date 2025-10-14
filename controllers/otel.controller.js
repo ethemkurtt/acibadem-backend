@@ -236,7 +236,6 @@ exports.deleteOtel = async (req, res) => {
     });
   }
 };
-const Otel = require("../models/otel/otel.model");
 
 // 🛑 Dikkat: Tüm otellerin lokasyonunu null yapar!
 exports.resetAllOtelLokasyon = async (req, res) => {
