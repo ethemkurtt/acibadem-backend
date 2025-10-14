@@ -143,6 +143,7 @@ exports.updateHavalimani = async (req, res) => {
     const payload = {};
     if (req.body.adi !== undefined) payload.adi = str(req.body.adi);
     if (req.body.il_kodu !== undefined) payload.il_kodu = str(req.body.il_kodu);
+    if (req.body.kordinat !== undefined) payload.kordinat = str(req.body.kordinat);
     if (req.body.ilce_kodu !== undefined)
       payload.ilce_kodu = str(req.body.ilce_kodu);
 
