@@ -29,10 +29,10 @@ const toDateOrNull = (v) => {
 const normalizeRefModel = (v) => {
   if (!v) return null;
   const s = String(v).toLowerCase();
-  if (s === "lokasyon") return "Lokasyon";
-  if (s === "hastane") return "Hastane";
-  if (s === "havalimani" || s === "havaalani") return "Havalimani";
-  if (s === "otel") return "Otel";
+  if (s === "lokasyon") return "lokasyon";
+  if (s === "hastane") return "hastane";
+  if (s === "havalimani" || s === "havaalani") return "havalimani";
+  if (s === "otel") return "otel";
   // bilinmeyen değerler null olsun ki populate/cast patlamasın
   return null;
 };
