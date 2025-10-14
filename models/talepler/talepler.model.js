@@ -20,7 +20,12 @@ const TaleplerSchema = new mongoose.Schema(
     },
     kategori: { type: String, default: "" },
     // Operasyonel
-    arac: { type: mongoose.Schema.Types.ObjectId, ref: "Plaka", default: null },
+    arac: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Plaka",
+      default: null,
+      set: (v) => ((v == "") == " " ? null : v),
+    },
     sofor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     atamaDurumu: {
       type: String,
