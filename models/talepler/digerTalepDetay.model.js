@@ -27,12 +27,7 @@ const DigerTalepDetaySchema = new mongoose.Schema(
     talep_aciklama: { type: String, set: toNullIfEmpty, default: null },
     nereden: { type: String, set: toNullIfEmpty, default: null },
     nereye: { type: String, set: toNullIfEmpty, default: null },
-
-    /**
-     * Not: Eski modelde `transfer_tarih` ve `transfer_saat` vardı.
-     * Yeni mimaride bunlar Talepler.transferTarihi / transferSaati'ne taşındı.
-     * İstersen controller'da gelen `transfer_tarih/saat` değerlerini Talepler'e mapliyoruz.
-     */
+    transferTarihi: { type: Date, default: null },
   },
   {
     timestamps: true,
