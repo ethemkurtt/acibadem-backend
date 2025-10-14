@@ -114,7 +114,7 @@ exports.list = async (req, res) => {
       limit: Number(limit),
       total,
       items,
-      filters: { startDate, endDate }, // istersen debug için
+      filters: { startDate, endDate },
     });
   } catch (err) {
     res
@@ -162,6 +162,7 @@ exports.updateById = async (req, res) => {
       .json({ message: "Talep güncellenemedi", error: err.message });
   }
 };
+
 exports.assignAracSofor = async (req, res) => {
   try {
     const { id } = req.params;
@@ -221,6 +222,22 @@ exports.assignAracSofor = async (req, res) => {
     return res
       .status(500)
       .json({ error: "Atama yapılamadı", details: err.message });
+  }
+};
+exports.updateUetdsSeferReferansNo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { uetdsSeferReferansNo } = req.body;
+
+    const item = await Talepler.findByIdAndUpdate(
+      id,
+      { uetdsSeferReferansNo },
+      { new: true }
+    );
+
+    return res.json(item);
+  } catch (err) {
+    return res.status(500).json({ error: "Güncelleme yapılamadı" });
   }
 };
 

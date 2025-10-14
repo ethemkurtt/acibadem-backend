@@ -12,7 +12,6 @@ const {
 
 // 📦 Excel'den tek seferlik içe aktarım
 router.post("/import", importOtellerFromExcel);
-router.post("/oteller/reset-lokasyon", resetAllOtelLokasyon);
 // ➕ Yeni otel ekle
 router.post("/", createOtel);
 

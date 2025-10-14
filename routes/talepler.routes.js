@@ -24,10 +24,9 @@ router.get("/taleplerim",  authRequired, ctrl.taleplerim);
 router.get("/aracIsEmri",  authRequired, ctrl.aracIsEmri);
 router.get("/isAtamalarim",  authRequired, ctrl.isAtamalarim);
 router.get("/islerim",  authRequired, ctrl.islerim);
-
-// 3) Genel :id rotaları – inline regex YOK
 router.get("/:id", ctrl.getById);
 router.put("/:id", ctrl.updateById);
+router.put("/updateUetdsSeferReferansNo/:id", ctrl.updateUetdsSeferReferansNo);
 router.put("/:id/atama", authRequired, ctrl.assignAracSofor);
 router.delete("/:id", ctrl.deleteById);
 

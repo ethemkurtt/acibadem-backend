@@ -3,7 +3,6 @@ const {
   Types: { ObjectId },
 } = require("mongoose");
 
-// Projendeki gerçek modele göre yolu doğrula:
 const Otel = require("../models/otel/otel.model"); // Gerekirse: require("../models/Otel")
 const XLSX = require("xlsx");
 const path = require("path");
@@ -30,10 +29,9 @@ const toObjectIdOrUndefined = (v) => {
   return ObjectId.isValid(s) ? new ObjectId(s) : undefined;
 };
 
-// Yalnızca izin verilen alanları al + tipleri düzenle
+
 const buildOtelPayload = (src = {}) => ({
   otelAdi:          emptyToUndefined(src.otelAdi),
-  // lokasyon mutlaka ObjectId olmalı; isim geldiyse undefined kalır (populate çalışmaz)
   lokasyon:         toObjectIdOrUndefined(src.lokasyon),
   rezervasyonEmail: emptyToUndefined(src.rezervasyonEmail),
   yetkiliKisi:      emptyToUndefined(src.yetkiliKisi),
@@ -42,8 +40,6 @@ const buildOtelPayload = (src = {}) => ({
   firmaUnvani:      emptyToUndefined(src.firmaUnvani),
   vergiDairesi:     emptyToUndefined(src.vergiDairesi),
   vergiNo:          emptyToUndefined(src.vergiNo),
-
-  // yeni alanlar (opsiyonel)
   il_kodu:          toIntOrUndefined(src.il_kodu),
   ilce_kodu:        toIntOrUndefined(src.ilce_kodu),
   kordinat:         emptyToUndefined(src.kordinat),
@@ -212,7 +208,7 @@ exports.updateOtel = async (req, res) => {
   }
 };
 
-/* --------------------------------- DELETE --------------------------------- */
+
 exports.deleteOtel = async (req, res) => {
   try {
     const deleted = await Otel.findByIdAndDelete(req.params.id)
@@ -232,27 +228,6 @@ exports.deleteOtel = async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       message: "Silme hatası",
-      data: { error: err.message },
-    });
-  }
-};
-
-// 🛑 Dikkat: Tüm otellerin lokasyonunu null yapar!
-exports.resetAllOtelLokasyon = async (req, res) => {
-  try {
-    // (Opsiyonel) basit bir güvenlik: admin kontrolü
-    // if (!req.user || req.user.role !== 'admin') {
-    //   return res.status(403).json({ message: "Yetkisiz işlem" });
-    // }
-
-    const result = await Otel.updateMany({}, { $set: { lokasyon: null } });
-    return res.json({
-      message: "Tüm otellerin lokasyonları sıfırlandı",
-      data: { matched: result.matchedCount ?? result.n, modified: result.modifiedCount ?? result.nModified }
-    });
-  } catch (err) {
-    return res.status(500).json({
-      message: "Sıfırlama hatası",
       data: { error: err.message },
     });
   }
