@@ -55,6 +55,7 @@ const hastaDetayRoutes      = require("./routes/hastaTalepDetay.routes");
 const personelDetayRoutes      = require("./routes/personelTalepDetay.routes");
 const misafirDetayRoutes      = require("./routes/misafirTalepDetay.routes");
 const digerDetayRoutes      = require("./routes/digerTalepDetay.routes");
+const takvimRoutes      = require("./routes/takvim.routes");
 
 // ---- Route mounts ----
 // /api kökü
@@ -83,6 +84,7 @@ app.use("/api", roleGroupRoutes);
 app.use("/api/sehirler", sehirlerRouter);
 app.use("/api/plakalar", plakalarRouter);
 app.use("/api/sohbet", sohbetRoutes);
+app.use("/api/takvim", takvimRoutes);
 
 // Yeni eklenen endpoint’ler (CJS):
 app.use("/api/talepler/", taleplerRoutes);
