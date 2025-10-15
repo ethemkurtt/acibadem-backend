@@ -124,38 +124,7 @@ exports.list = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
-const getModel = (type) => {
-  const t = String(type || "").toLowerCase();
-  if (t === "hastane") return Hastane;
-  if (t === "otel") return Otel;
-  if (t === "havaalani" || t === "havalimani") return Havalimani;
-  return null;
-};
 
-const fetchKordinat = async (type, id) => {
-  const M = getModel(type);
-  if (!M || !id) return null;
-  const doc = await M.findById(id).select("kordinat").lean();
-  return doc?.kordinat ?? null; // sadece string
-};
-
-const addKordinatToRoutes = async (routes = []) =>
-  Promise.all(
-    routes.map(async (r) => {
-      const base = r?.toObject ? r.toObject() : r;
-      const out = { ...base };
-
-      if (base?.pickup?.type && base?.pickup?.locationId) {
-        const k = await fetchKordinat(base.pickup.type, base.pickup.locationId);
-        if (k) out.pickup = { ...base.pickup, kordinat: k };
-      }
-      if (base?.drop?.type && base?.drop?.locationId) {
-        const k = await fetchKordinat(base.drop.type, base.drop.locationId);
-        if (k) out.drop = { ...base.drop, kordinat: k };
-      }
-      return out;
-    })
-  );
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -172,7 +141,8 @@ exports.getById = async (req, res) => {
 
     if (!doc) return res.status(404).json({ message: "Kayıt bulunamadı" });
 
-    // --- SADECE BU EK: hasta/misafir ise routes'a kordinat stringi ekle ---
+    // --- SADECE ISTENEN IF BLOĞU ---
+    // (addKordinatToRoutes, fetchKordinat/getModel yardımcılarını yukarıda eklemiştin)
     let result = doc.toObject();
     if (doc.requestType === "hasta" || doc.requestType === "misafir") {
       const DetayModel = doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
@@ -181,10 +151,10 @@ exports.getById = async (req, res) => {
         .lean();
 
       if (d?.routes?.length) {
-        result.routes = await addKordinatToRoutes(d.routes);
+        result.routes = await addKordinatToRoutes(d.routes); // pickup/drop içine sadece kordinat string’i ekler
       }
     }
-    // ----------------------------------------------------------------------
+    // --- /IF ---
 
     res.json(result);
   } catch (err) {
@@ -296,6 +266,14 @@ exports.deleteById = async (req, res) => {
 };
 
 // ---------------------- FULL DETAIL ----------------------
+const getLocModel = (type) => {
+  const t = String(type || "").toLowerCase();
+  if (t === "hastane") return Hastane;
+  if (t === "otel") return Otel;
+  if (t === "havaalani" || t === "havalimani") return Havalimani;
+  return null;
+};
+
 exports.getFullById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -323,8 +301,6 @@ exports.getFullById = async (req, res) => {
 
     // 2) Tip-özel detay + referanslar (companions/routes/notificationPerson) TAM OBJE
     if (talep.requestType === "hasta") {
-      // HastaDetay şemanda `ref: "Companions" | "Routes" | "NotificationPerson"` ise,
-      // populate otomatik doğru modelden doldurur.
       detay = await HastaDetay.findOne({ talep_id: id })
         .populate([
           { path: "companions" },
@@ -339,8 +315,6 @@ exports.getFullById = async (req, res) => {
         .populate([{ path: "companions" }])
         .lean();
     } else if (talep.requestType === "misafir") {
-      // MisafirDetay şemanda ref'ler "MisafirCompanions" / "MisafirRoutes" / "MisafirNotificationPerson" ise
-      // yine populate doğru modeli kullanır (preload ettik).
       detay = await MisafirDetay.findOne({ talep_id: id })
         .populate([
           { path: "companions" },
@@ -353,17 +327,54 @@ exports.getFullById = async (req, res) => {
     } else if (talep.requestType === "diger") {
       detay = await DigerDetay.findOne({ talep_id: id }).lean();
     } else {
-      // bilinmeyen tip
       detay = null;
     }
 
-    // 3) DÖNÜŞ
-    // Dün istediğin format: data altında { talep: {...}, detay: {...} }
+    // 3) hasta/misafir için: pickup/drop DEĞERİ = ilgili modeldeki kordinat
+    if (
+      (talep.requestType === "hasta" || talep.requestType === "misafir") &&
+      detay?.routes?.length
+    ) {
+      detay.routes = await Promise.all(
+        detay.routes.map(async (r) => {
+          const out = { ...r };
+          // pickup
+          if (r?.pickup?.type && r?.pickup?.locationId) {
+            const M = getLocModel(r.pickup.type);
+            if (M) {
+              const doc = await M.findById(r.pickup.locationId)
+                .select("kordinat")
+                .lean()
+                .catch(() => null);
+              out.pickup = doc?.kordinat ?? null; // sadece kordinat döner (tipi neyse o)
+            } else {
+              out.pickup = null;
+            }
+          }
+          // drop
+          if (r?.drop?.type && r?.drop?.locationId) {
+            const M = getLocModel(r.drop.type);
+            if (M) {
+              const doc = await M.findById(r.drop.locationId)
+                .select("kordinat")
+                .lean()
+                .catch(() => null);
+              out.drop = doc?.kordinat ?? null; // sadece kordinat döner (tipi neyse o)
+            } else {
+              out.drop = null;
+            }
+          }
+          return out;
+        })
+      );
+    }
+
+    // 4) DÖNÜŞ
     return res.json({
       ok: true,
       data: {
-        talep, // okunabilir alanlar (lokasyon, talepEdenId vb. populate)
-        detay: detay || null, // companions/routes/notificationPerson TAM OBJE (ID değil)
+        talep,
+        detay: detay || null,
       },
     });
   } catch (err) {
