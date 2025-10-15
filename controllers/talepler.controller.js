@@ -282,6 +282,41 @@ exports.getFullById = async (req, res) => {
 
     res.set("Cache-Control", "no-store");
 
+    // --- İç yardımcılar (self-contained) ---
+    const getLocModel = (type) => {
+      const t = String(type || "").toLowerCase();
+      if (t === "hastane") return require("../models/hastane/hastane.model");
+      if (t === "otel") return require("../models/Otel");
+      if (t === "havaalani" || t === "havalimani")
+        return require("../models/Havalimani");
+      return null;
+    };
+
+    const addKordinatToOne = async (obj) => {
+      if (!obj || typeof obj !== "object") return obj;
+      if (!obj.type || !obj.locationId) return obj;
+
+      const M = getLocModel(obj.type);
+      if (!M) return obj;
+
+      const doc = await M.findById(obj.locationId)
+        .select("kordinat")
+        .lean()
+        .catch(() => null);
+
+      // NESNEYİ KORU + sadece kordinat alanını ekle
+      return { ...obj, kordinat: doc?.kordinat ?? null };
+    };
+
+    const addKordinatFlexible = async (val) => {
+      if (Array.isArray(val)) {
+        const updated = await Promise.all(val.map(addKordinatToOne));
+        return updated;
+      }
+      return await addKordinatToOne(val);
+    };
+    // ---------------------------------------
+
     // 1) Ana talep — okunabilir (populate)
     const talep = await Talepler.findById(id)
       .populate([
@@ -330,7 +365,7 @@ exports.getFullById = async (req, res) => {
       detay = null;
     }
 
-    // 3) hasta/misafir için: pickup/drop KALSIN; sadece pickupKordinat/dropKordinat alanlarını ekle
+    // 3) hasta/misafir için: pickup/drop İÇİNE kordinat ekle (pickup/drop dizi olursa her elemana eklenir)
     if (
       (talep.requestType === "hasta" || talep.requestType === "misafir") &&
       detay?.routes?.length
@@ -340,34 +375,8 @@ exports.getFullById = async (req, res) => {
           const base = r?.toObject ? r.toObject() : r;
           const out = { ...base };
 
-          // pickup -> pickupKordinat
-          if (base?.pickup?.type && base?.pickup?.locationId) {
-            const M = getLocModel(base.pickup.type);
-            if (M) {
-              const doc = await M.findById(base.pickup.locationId)
-                .select("kordinat")
-                .lean()
-                .catch(() => null);
-              out.pickupKordinat = doc?.kordinat ?? null; // VERİ NEYSE AYNI HALİ
-            } else {
-              out.pickupKordinat = null;
-            }
-          }
-
-          // drop -> dropKordinat
-          if (base?.drop?.type && base?.drop?.locationId) {
-            const M = getLocModel(base.drop.type);
-            if (M) {
-              const doc = await M.findById(base.drop.locationId
-              )
-                .select("kordinat")
-                .lean()
-                .catch(() => null);
-              out.dropKordinat = doc?.kordinat ?? null; // VERİ NEYSE AYNI HALİ
-            } else {
-              out.dropKordinat = null;
-            }
-          }
+          out.pickup = await addKordinatFlexible(base.pickup);
+          out.drop   = await addKordinatFlexible(base.drop);
 
           return out;
         })
