@@ -534,7 +534,6 @@ exports.taleplerim = async (req, res) => {
         .limit(Number(limit))
         .populate([
           { path: "lokasyon" },
-          { path: "routes" },
           { path: "sofor", select: userSelectExclude },
           { path: "arac" },
           { path: "talepEdenId", select: userSelectExclude },
