@@ -24,7 +24,7 @@ const TaleplerSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Plaka",
       default: null,
-      set: (v) => ((v == "") == " " ? null : v),
+      set: (v) => (v == null || v === "" || v === " " ? null : v),
     },
     sofor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     atamaDurumu: {

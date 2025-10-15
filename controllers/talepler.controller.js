@@ -181,13 +181,17 @@ exports.assignAracSofor = async (req, res) => {
 
     // --- Geriye dönük uyumlu alan okuma ---
     const norm = (v) => (typeof v === "string" ? v.trim() : v);
-    const soforIn = norm(req.body.soforId ?? req.body.sofor ?? req.body.driverId);
-    const aracIn  = norm(req.body.aracId  ?? req.body.arac  ?? req.body.vehicleId);
-    const lokIn   = norm(req.body.lokasyonId ?? req.body.lokasyon ?? req.body.locationId);
+    const soforIn = norm(
+      req.body.soforId ?? req.body.sofor ?? req.body.driverId
+    );
+    const aracIn = norm(req.body.aracId ?? req.body.arac ?? req.body.vehicleId);
+    const lokIn = norm(
+      req.body.lokasyonId ?? req.body.lokasyon ?? req.body.locationId
+    );
 
     if (soforIn !== undefined) update.sofor = isId(soforIn) ? soforIn : null;
-    if (aracIn  !== undefined) update.arac  = isId(aracIn)  ? aracIn  : null;
-    if (lokIn   !== undefined) {
+    if (aracIn !== undefined) update.arac = isId(aracIn) ? aracIn : null;
+    if (lokIn !== undefined) {
       update.lokasyon = isId(lokIn) ? lokIn : null;
       update.lokasyonSonDegistirenId = atamaYapanId || null;
     }
@@ -207,7 +211,9 @@ exports.assignAracSofor = async (req, res) => {
     return res.json({ message: "Atama başarılı", item });
   } catch (err) {
     console.error("❌ assignAracSofor hata:", err);
-    return res.status(500).json({ error: "Atama yapılamadı", details: err.message });
+    return res
+      .status(500)
+      .json({ error: "Atama yapılamadı", details: err.message });
   }
 };
 exports.updateUetdsSeferReferansNo = async (req, res) => {
@@ -569,8 +575,8 @@ exports.islerim = async (req, res) => {
 
     // --- FİLTRE ---
     const q = {
-      sofor: meId,            // şoför benim olmalı
-      atamaDurumu: "Evet",    // ataması yapılmış olmalı
+      sofor: meId, // şoför benim olmalı
+      atamaDurumu: "Evet", // ataması yapılmış olmalı
     };
 
     // Debug yardımcı
@@ -628,8 +634,8 @@ exports.isAtamalarim = async (req, res) => {
 
     // --- FİLTRE ---
     const q = {
-      atamaYapanId: meId,     // benim atadığım işler
-      atamaDurumu: "Evet",    // gerçekten ataması yapılmış olanlar
+      atamaYapanId: meId, // benim atadığım işler
+      atamaDurumu: "Evet", // gerçekten ataması yapılmış olanlar
     };
 
     // Sayfalama
