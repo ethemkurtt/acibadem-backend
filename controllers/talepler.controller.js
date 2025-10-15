@@ -330,40 +330,45 @@ exports.getFullById = async (req, res) => {
       detay = null;
     }
 
-    // 3) hasta/misafir için: pickup/drop DEĞERİ = ilgili modeldeki kordinat
+    // 3) hasta/misafir için: pickup/drop KALSIN; sadece pickupKordinat/dropKordinat alanlarını ekle
     if (
       (talep.requestType === "hasta" || talep.requestType === "misafir") &&
       detay?.routes?.length
     ) {
       detay.routes = await Promise.all(
         detay.routes.map(async (r) => {
-          const out = { ...r };
-          // pickup
-          if (r?.pickup?.type && r?.pickup?.locationId) {
-            const M = getLocModel(r.pickup.type);
+          const base = r?.toObject ? r.toObject() : r;
+          const out = { ...base };
+
+          // pickup -> pickupKordinat
+          if (base?.pickup?.type && base?.pickup?.locationId) {
+            const M = getLocModel(base.pickup.type);
             if (M) {
-              const doc = await M.findById(r.pickup.locationId)
+              const doc = await M.findById(base.pickup.locationId)
                 .select("kordinat")
                 .lean()
                 .catch(() => null);
-              out.pickup = doc?.kordinat ?? null; // sadece kordinat döner (tipi neyse o)
+              out.pickupKordinat = doc?.kordinat ?? null; // VERİ NEYSE AYNI HALİ
             } else {
-              out.pickup = null;
+              out.pickupKordinat = null;
             }
           }
-          // drop
-          if (r?.drop?.type && r?.drop?.locationId) {
-            const M = getLocModel(r.drop.type);
+
+          // drop -> dropKordinat
+          if (base?.drop?.type && base?.drop?.locationId) {
+            const M = getLocModel(base.drop.type);
             if (M) {
-              const doc = await M.findById(r.drop.locationId)
+              const doc = await M.findById(base.drop.locationId
+              )
                 .select("kordinat")
                 .lean()
                 .catch(() => null);
-              out.drop = doc?.kordinat ?? null; // sadece kordinat döner (tipi neyse o)
+              out.dropKordinat = doc?.kordinat ?? null; // VERİ NEYSE AYNI HALİ
             } else {
-              out.drop = null;
+              out.dropKordinat = null;
             }
           }
+
           return out;
         })
       );
