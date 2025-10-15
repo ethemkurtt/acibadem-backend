@@ -48,6 +48,7 @@ const DETAY_FIELDS = [
   "talep_aciklama",
   "nereden",
   "nereye",
+  "transferTarihi",
   // Not: Şema transferTarihi içeriyor; iş kuralı gereği Talepler'de tutuluyor.
   // Gerekirse açmak için aşağıyı yorumdan çıkarın:
   // "transferTarihi",
