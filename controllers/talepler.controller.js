@@ -4,9 +4,9 @@ const Talepler = require("../models/talepler/talepler.model");
 const {
   Types: { ObjectId },
 } = require("mongoose");
-const Hastane    = safeRequire("../models/hastane/hastane.model.js");
-const Otel       = safeRequire("../models/otel/otel.model.js");
-const Havalimani = safeRequire("../models/havalimanı/havalimani.model.js");
+const Hastane    = require("../models/hastane/hastane.model.js");
+const Otel       = require("../models/otel/otel.model.js");
+const Havalimani = require("../models/havalimanı/havalimani.model.js");
 // Tip-özel detay modelleri
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
 const PersonelDetay = require("../models/talepler/personelTalepDetay.model");
