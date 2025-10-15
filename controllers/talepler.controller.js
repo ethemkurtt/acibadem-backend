@@ -131,27 +131,31 @@ const getModel = (type) => {
   if (t === "havaalani" || t === "havalimani") return Havalimani;
   return null;
 };
+
 const fetchKordinat = async (type, id) => {
   const M = getModel(type);
   if (!M || !id) return null;
   const doc = await M.findById(id).select("kordinat").lean();
-  return doc?.kordinat ?? null;
+  return doc?.kordinat ?? null; // sadece string
 };
 
-// --- routes'u kordinat ile zenginleştir (sadece string ekler) ---
-const addKordinatToRoutes = async (routes=[]) =>
-  Promise.all(routes.map(async (r) => {
-    const out = { ...r };
-    if (r?.pickup?.type && r?.pickup?.locationId) {
-      const k = await fetchKordinat(r.pickup.type, r.pickup.locationId);
-      if (k) out.pickup = { ...r.pickup, kordinat: k };
-    }
-    if (r?.drop?.type && r?.drop?.locationId) {
-      const k = await fetchKordinat(r.drop.type, r.drop.locationId);
-      if (k) out.drop = { ...r.drop, kordinat: k };
-    }
-    return out;
-  }));
+const addKordinatToRoutes = async (routes = []) =>
+  Promise.all(
+    routes.map(async (r) => {
+      const base = r?.toObject ? r.toObject() : r;
+      const out = { ...base };
+
+      if (base?.pickup?.type && base?.pickup?.locationId) {
+        const k = await fetchKordinat(base.pickup.type, base.pickup.locationId);
+        if (k) out.pickup = { ...base.pickup, kordinat: k };
+      }
+      if (base?.drop?.type && base?.drop?.locationId) {
+        const k = await fetchKordinat(base.drop.type, base.drop.locationId);
+        if (k) out.drop = { ...base.drop, kordinat: k };
+      }
+      return out;
+    })
+  );
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -168,8 +172,7 @@ exports.getById = async (req, res) => {
 
     if (!doc) return res.status(404).json({ message: "Kayıt bulunamadı" });
 
-    // --- SADECE ISTENEN IF BLOĞU ---
-    // (addKordinatToRoutes, fetchKordinat/getModel yardımcılarını yukarıda eklemiştin)
+    // --- SADECE BU EK: hasta/misafir ise routes'a kordinat stringi ekle ---
     let result = doc.toObject();
     if (doc.requestType === "hasta" || doc.requestType === "misafir") {
       const DetayModel = doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
@@ -178,10 +181,10 @@ exports.getById = async (req, res) => {
         .lean();
 
       if (d?.routes?.length) {
-        result.routes = await addKordinatToRoutes(d.routes); // pickup/drop içine sadece kordinat string’i ekler
+        result.routes = await addKordinatToRoutes(d.routes);
       }
     }
-    // --- /IF ---
+    // ----------------------------------------------------------------------
 
     res.json(result);
   } catch (err) {
