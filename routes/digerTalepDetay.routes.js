@@ -6,7 +6,7 @@ const ctrl = require("../controllers/digerTalepDetay.controller");
 // Tek başına detay CRUD
 router.post("/", ctrl.create);
 router.get("/by-talep/:talepId", ctrl.getByTalepId);
-router.put("/by-talep/:talepId", ctrl.updateByTalepId);
+router.put("/combined/:talepId", ctrl.updateByTalepId);
 router.delete("/by-talep/:talepId", ctrl.deleteByTalepId);
 
 // Birleştirilmiş (Talepler + DigerDetay)

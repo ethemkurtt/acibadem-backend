@@ -19,7 +19,7 @@ const DigerTalepDetaySchema = new mongoose.Schema(
       index: true,
     },
 
-    // Eski şemadaki tip-özel alanlar (opsiyonel, boş bırakılabilir)
+   
     talep_tipi: { type: String, set: toNullIfEmpty, default: null },        // "Evrak" vb.
     talep_tipi_diger: { type: String, set: toNullIfEmpty, default: null },
     alt_tip: { type: String, set: toNullIfEmpty, default: null },           // "Banka" vb.
