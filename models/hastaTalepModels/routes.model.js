@@ -76,7 +76,6 @@ const RoutesSchema = new mongoose.Schema(
       arrival_date: { type: Date, default: null, set: toDateOrNull },
       ticketPath: { type: String, default: null, set: trimOrNull },
       passportPath: { type: String, default: null, set: trimOrNull },
-
       il_adi: { type: String, default: null, set: trimOrNull },
       manuelLocation: { type: String, default: null, set: trimOrNull },
       ulke_kodu: { type: String, default: "TR", set: trimOrNull },

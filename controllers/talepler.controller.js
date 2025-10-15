@@ -4,7 +4,9 @@ const Talepler = require("../models/talepler/talepler.model");
 const {
   Types: { ObjectId },
 } = require("mongoose");
-
+const Hastane    = safeRequire("../models/hastane/hastane.model.js");
+const Otel       = safeRequire("../models/otel/otel.model.js");
+const Havalimani = safeRequire("../models/havalimanı/havalimani.model.js");
 // Tip-özel detay modelleri
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
 const PersonelDetay = require("../models/talepler/personelTalepDetay.model");
@@ -122,7 +124,34 @@ exports.list = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
+const getModel = (type) => {
+  const t = String(type || "").toLowerCase();
+  if (t === "hastane") return Hastane;
+  if (t === "otel") return Otel;
+  if (t === "havaalani" || t === "havalimani") return Havalimani;
+  return null;
+};
+const fetchKordinat = async (type, id) => {
+  const M = getModel(type);
+  if (!M || !id) return null;
+  const doc = await M.findById(id).select("kordinat").lean();
+  return doc?.kordinat ?? null;
+};
 
+// --- routes'u kordinat ile zenginleştir (sadece string ekler) ---
+const addKordinatToRoutes = async (routes=[]) =>
+  Promise.all(routes.map(async (r) => {
+    const out = { ...r };
+    if (r?.pickup?.type && r?.pickup?.locationId) {
+      const k = await fetchKordinat(r.pickup.type, r.pickup.locationId);
+      if (k) out.pickup = { ...r.pickup, kordinat: k };
+    }
+    if (r?.drop?.type && r?.drop?.locationId) {
+      const k = await fetchKordinat(r.drop.type, r.drop.locationId);
+      if (k) out.drop = { ...r.drop, kordinat: k };
+    }
+    return out;
+  }));
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -138,7 +167,23 @@ exports.getById = async (req, res) => {
     ]);
 
     if (!doc) return res.status(404).json({ message: "Kayıt bulunamadı" });
-    res.json(doc);
+
+    // --- SADECE ISTENEN IF BLOĞU ---
+    // (addKordinatToRoutes, fetchKordinat/getModel yardımcılarını yukarıda eklemiştin)
+    let result = doc.toObject();
+    if (doc.requestType === "hasta" || doc.requestType === "misafir") {
+      const DetayModel = doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
+      const d = await DetayModel.findOne({ talep_id: id })
+        .populate([{ path: "routes" }])
+        .lean();
+
+      if (d?.routes?.length) {
+        result.routes = await addKordinatToRoutes(d.routes); // pickup/drop içine sadece kordinat string’i ekler
+      }
+    }
+    // --- /IF ---
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ message: "Talep getirilemedi", error: err.message });
   }
