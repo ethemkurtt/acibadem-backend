@@ -15,6 +15,99 @@ const pick = (obj, keys) =>
   }, {});
 
 exports.createCombined = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // { talep, detay } veya flat
+    const body = req.body || {};
+    const isFlat = !body.talep && !body.detay;
+
+    const srcTalep = isFlat ? body : body.talep || {};
+    const srcDetay = isFlat ? body : body.detay || {};
+
+    // --- Ortak talep alanları
+    const talepKeys = [
+      "fullName",
+      "passportNo",
+      "phone",
+      "lokasyon",
+      "kategori",
+      "arac",
+      "sofor",
+      "atamaDurumu",
+      "transferTarihi",
+      "transferSaati",
+      "talepDurumu",
+      "talepEdenId",
+      "isDurumu",
+      "atamaYapanId",
+      "atamaYapanAdSoyad",
+      "uetdsSeferReferansNo",
+      "lokasyonSonDegistirenId",
+      "description",
+      "talepEdenAdSoyad",
+    ];
+    const talepPayload = pick(srcTalep, talepKeys);
+
+    // requestType'ı garanti et
+    talepPayload.requestType = "personel";
+    // atamaDurumu gelmezse "Hayır" yap (hasta ile tutarlılık istersen)
+    if (talepPayload.atamaDurumu == null) talepPayload.atamaDurumu = "Hayır";
+
+    // --- Gömülü listeler
+    const companionsIn = Array.isArray(srcDetay.companions)
+      ? srcDetay.companions
+      : Array.isArray(srcTalep.companions)
+      ? srcTalep.companions
+      : [];
+
+    const routesIn = Array.isArray(srcDetay.routes)
+      ? srcDetay.routes
+      : Array.isArray(srcTalep.routes)
+      ? srcTalep.routes
+      : [];
+
+    // 1) Talep oluştur
+    const [talepDoc] = await Talepler.create([talepPayload], { session });
+
+    // 2) companions/routes gerçek koleksiyonlara yaz
+    const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
+    const routeIds = await ensureRouteIds(routesIn, talepDoc._id, session);
+
+    // 3) PersonelDetay oluştur
+    const detayKeys = ["email", "departman", "soforDurumu", "aciklama"];
+    const detayPayload = {
+      ...pick(srcDetay, detayKeys),
+      talep_id: talepDoc._id,
+      companions: companionIds,
+      routes: routeIds,
+    };
+
+    const [detayDoc] = await PersonelDetay.create([detayPayload], { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Dönüşte populate edilmiş obje
+    const populatedTalep = await Talepler.findById(talepDoc._id)
+      .populate(TALEP_POPULATE)
+      .lean();
+    const populatedDetay = await PersonelDetay.findById(detayDoc._id)
+      .populate(DETAY_POPULATE)
+      .lean();
+
+    return res.status(201).json({
+      message: "Personel talep ve detay başarıyla oluşturuldu",
+      data: { talep: populatedTalep, detay: populatedDetay },
+    });
+  } catch (err) {
+    await session.abortTransaction().catch(() => {});
+    session.endSession();
+    return res.status(400).json({
+      message: "Birleştirilmiş oluşturma başarısız",
+      data: { error: err.message },
+    });
+  }
 };
 
 
