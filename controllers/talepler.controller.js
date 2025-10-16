@@ -286,9 +286,9 @@ exports.getFullById = async (req, res) => {
     const getLocModel = (type) => {
       const t = String(type || "").toLowerCase();
       if (t === "hastane") return require("../models/hastane/hastane.model");
-      if (t === "otel") return require("../models/Otel");
+      if (t === "otel") return require("../models/otel/otel.model.js");
       if (t === "havaalani" || t === "havalimani")
-        return require("../models/Havalimani");
+        return require("../models/havalimanı/havalimani.model.js");
       return null;
     };
 
