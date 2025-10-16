@@ -8,126 +8,26 @@ const Companions = require("../models/hastaTalepModels/companions.model");
 const Routes = require("../models/hastaTalepModels/routes.model");
 const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 
+const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const pick = (obj, keys) =>
   keys.reduce((acc, k) => {
     if (obj && Object.prototype.hasOwnProperty.call(obj, k)) acc[k] = obj[k];
     return acc;
   }, {});
 
-exports.createCombined = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    // { talep, detay } veya flat
-    const body = req.body || {};
-    const isFlat = !body.talep && !body.detay;
-
-    const srcTalep = isFlat ? body : body.talep || {};
-    const srcDetay = isFlat ? body : body.detay || {};
-
-    // --- Ortak talep alanları
-    const talepKeys = [
-      "fullName",
-      "passportNo",
-      "phone",
-      "lokasyon",
-      "kategori",
-      "arac",
-      "sofor",
-      "atamaDurumu",
-      "transferTarihi",
-      "transferSaati",
-      "talepDurumu",
-      "talepEdenId",
-      "isDurumu",
-      "atamaYapanId",
-      "atamaYapanAdSoyad",
-      "uetdsSeferReferansNo",
-      "lokasyonSonDegistirenId",
-      "description",
-      "talepEdenAdSoyad",
-    ];
-    const talepPayload = pick(srcTalep, talepKeys);
-
-    // requestType'ı garanti et
-    talepPayload.requestType = "personel";
-    // atamaDurumu gelmezse "Hayır" yap (hasta ile tutarlılık istersen)
-    if (talepPayload.atamaDurumu == null) talepPayload.atamaDurumu = "Hayır";
-
-    // --- Gömülü listeler
-    const companionsIn = Array.isArray(srcDetay.companions)
-      ? srcDetay.companions
-      : Array.isArray(srcTalep.companions)
-      ? srcTalep.companions
-      : [];
-
-    const routesIn = Array.isArray(srcDetay.routes)
-      ? srcDetay.routes
-      : Array.isArray(srcTalep.routes)
-      ? srcTalep.routes
-      : [];
-
-    // 1) Talep oluştur
-    const [talepDoc] = await Talepler.create([talepPayload], { session });
-
-    // 2) companions/routes gerçek koleksiyonlara yaz
-    const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
-    const routeIds = await ensureRouteIds(routesIn, talepDoc._id, session);
-
-    // 3) PersonelDetay oluştur
-    const detayKeys = ["email", "departman", "soforDurumu", "aciklama"];
-    const detayPayload = {
-      ...pick(srcDetay, detayKeys),
-      talep_id: talepDoc._id,
-      companions: companionIds,
-      routes: routeIds,
-    };
-
-    const [detayDoc] = await PersonelDetay.create([detayPayload], { session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    // Dönüşte populate edilmiş obje
-    const populatedTalep = await Talepler.findById(talepDoc._id)
-      .populate(TALEP_POPULATE)
-      .lean();
-    const populatedDetay = await PersonelDetay.findById(detayDoc._id)
-      .populate(DETAY_POPULATE)
-      .lean();
-
-    return res.status(201).json({
-      message: "Personel talep ve detay başarıyla oluşturuldu",
-      data: { talep: populatedTalep, detay: populatedDetay },
-    });
-  } catch (err) {
-    await session.abortTransaction().catch(() => {});
-    session.endSession();
-    return res.status(400).json({
-      message: "Birleştirilmiş oluşturma başarısız",
-      data: { error: err.message },
-    });
-  }
-};
-
-
-
-const isId = (id) => mongoose.Types.ObjectId.isValid(id);
-
-// ——— embedded -> referans normalizer’lar (PUT semantiği: verildiyse değiştir, verilmediyse dokunma) ———
+/* --------------------------------- Helpers -------------------------------- */
 async function ensureCompanionIds(arr, session) {
-  if (!Array.isArray(arr)) return null; // null => değişiklik yok
-  if (!arr.length) return []; // [] => kaydı boş liste yap
-  const ids = [],
-    toInsert = [];
+  if (!Array.isArray(arr)) return null;   // null => değişiklik yok
+  if (!arr.length) return [];             // []   => boş liste yap
+  const ids = [], toInsert = [];
   for (const c of arr) {
-    if (typeof c === "string" && isId(c))
+    if (typeof c === "string" && isId(c)) {
       ids.push(new mongoose.Types.ObjectId(c));
-    else if (c && typeof c === "object") {
+    } else if (c && typeof c === "object") {
       toInsert.push({
         fullName: c.fullName || "",
         passportNo: c.passportNo || "",
-      }); // hastaId opsiyonel
+      }); // hastaId opsiyonel (şemanı bozmuyorum)
     }
   }
   if (toInsert.length) {
@@ -140,12 +40,11 @@ async function ensureCompanionIds(arr, session) {
 async function ensureRouteIds(arr, session) {
   if (!Array.isArray(arr)) return null;
   if (!arr.length) return [];
-  const ids = [],
-    toInsert = [];
+  const ids = [], toInsert = [];
   for (const r of arr) {
-    if (typeof r === "string" && isId(r))
+    if (typeof r === "string" && isId(r)) {
       ids.push(new mongoose.Types.ObjectId(r));
-    else if (r && typeof r === "object") {
+    } else if (r && typeof r === "object") {
       toInsert.push({ pickup: r.pickup || {}, drop: r.drop || {} });
     }
   }
@@ -158,8 +57,8 @@ async function ensureRouteIds(arr, session) {
 
 async function ensureNotificationId(obj, session) {
   if (obj === undefined) return undefined; // hiç gönderilmediyse dokunma
-  if (obj === null) return null; // null gönderildiyse kaldır
-  if (typeof obj === "string" && isId(obj)) return obj;
+  if (obj === null) return null;           // null gönderildiyse kaldır
+  if (typeof obj === "string" && isId(obj)) return new mongoose.Types.ObjectId(obj);
   if (obj && typeof obj === "object") {
     const [ins] = await NotificationPerson.create(
       [{ fullName: obj.fullName || "", description: obj.description || "" }],
@@ -170,28 +69,128 @@ async function ensureNotificationId(obj, session) {
   return undefined;
 }
 
-// ——— PUT /hasta-detay/combined/:talepId ———
+/* ------------------------ createCombined (Talep + Detay) ------------------------ */
+exports.createCombined = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    // { talep, detay } veya flat
+    const body = req.body || {};
+    const isFlat = !body.talep && !body.detay;
+
+    const srcTalep = isFlat ? body : body.talep || {};
+    const srcDetay = isFlat ? body : body.detay || {};
+
+    // Ortak talep alanları
+    const talepKeys = [
+      "fullName","passportNo","phone","lokasyon","kategori",
+      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
+      "talepDurumu","talepEdenId","isDurumu","atamaYapanId","atamaYapanAdSoyad",
+      "uetdsSeferReferansNo","lokasyonSonDegistirenId","description","talepEdenAdSoyad",
+    ];
+    const talepPayload = pick(srcTalep, talepKeys);
+
+    // requestType'ı garanti et (HASTA)
+    talepPayload.requestType = "hasta";
+    // atamaDurumu default
+    if (talepPayload.atamaDurumu == null) talepPayload.atamaDurumu = "Hayır";
+
+    // Talep oluştur
+    const [talepDoc] = await Talepler.create([talepPayload], { session });
+
+    // Gömülü listeler (detaydan, yoksa talep içinden)
+    const companionsIn =
+      Array.isArray(srcDetay.companions) ? srcDetay.companions :
+      (Array.isArray(srcTalep.companions) ? srcTalep.companions : []);
+    const routesIn =
+      Array.isArray(srcDetay.routes) ? srcDetay.routes :
+      (Array.isArray(srcTalep.routes) ? srcTalep.routes : []);
+    const notifIn = srcDetay.notificationPerson;
+
+    const companionIds = await ensureCompanionIds(companionsIn, session);
+    const routeIds     = await ensureRouteIds(routesIn, session);
+    const notifId      = await ensureNotificationId(notifIn, session);
+
+    // HastaDetay alanları
+    const detayKeys = [
+      "bolge","country","language","wheelchair",
+      "donusTarihi","donusSaati","refakatciSayisi","bagajSayisi",
+      "aciklama","isBaslamaZamani","isBitisZamani","iptalZamani","iptalNedeni",
+    ];
+    const detayPayload = {
+      ...pick(srcDetay, detayKeys),
+      talep_id: talepDoc._id,
+      ...(companionIds !== null ? { companions: companionIds } : {}),
+      ...(routeIds     !== null ? { routes: routeIds } : {}),
+      ...(notifId      !== undefined ? { notificationPerson: notifId } : {}),
+    };
+
+    const [detayDoc] = await HastaDetay.create([detayPayload], { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Dönüşte populate
+    const populatedTalep = await Talepler.findById(talepDoc._id)
+      .populate([
+        { path: "lokasyon" },
+        { path: "arac" },
+        { path: "sofor", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "talepEdenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "atamaYapanId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "lokasyonSonDegistirenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+      ])
+      .lean();
+
+    const populatedDetay = await HastaDetay.findById(detayDoc._id)
+      .populate([
+        { path: "companions" },
+        { path: "routes" },
+        { path: "notificationPerson" },
+        { path: "bolge" },
+        { path: "country" },
+      ])
+      .lean();
+
+    return res.status(201).json({
+      message: "Hasta talep ve detay başarıyla oluşturuldu",
+      data: { talep: populatedTalep, detay: populatedDetay },
+    });
+
+  } catch (err) {
+    await session.abortTransaction().catch(() => {});
+    session.endSession();
+    return res.status(400).json({
+      message: "Birleştirilmiş oluşturma başarısız",
+      data: { error: err.message },
+    });
+  }
+};
+
+/* -------------- PUT /hasta-detay/combined/:talepId (ikisini birden güncelle) -------------- */
 exports.updateCombined = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
   try {
+    session.startTransaction();
+
     const { talepId } = req.params;
     if (!isId(talepId)) {
+      await session.abortTransaction().catch(() => {});
       session.endSession();
       return res.status(400).json({
         message: "Geçersiz talepId",
-        data: null,
+        data: { error: "Invalid talepId format." },
       });
     }
 
-    // Talep gerçekten var mı ve 'hasta' mı?
     const existingTalep = await Talepler.findById(talepId).session(session);
     if (!existingTalep) {
       await session.abortTransaction().catch(() => {});
       session.endSession();
       return res.status(404).json({
         message: "Talep bulunamadı",
-        data: null,
+        data: { talep: null, detay: null },
       });
     }
     if (existingTalep.requestType && existingTalep.requestType !== "hasta") {
@@ -199,7 +198,7 @@ exports.updateCombined = async (req, res) => {
       session.endSession();
       return res.status(400).json({
         message: "Talep tipi 'hasta' değil",
-        data: null,
+        data: { error: "Mismatched requestType" },
       });
     }
 
@@ -207,69 +206,37 @@ exports.updateCombined = async (req, res) => {
     const srcTalep = body.talep || {};
     const srcDetay = body.detay || {};
 
-    // 1) Talepler (ortak) — yalnızca gönderilen alanları güncelle
+    // Talepler — yalnızca gönderilen alanları güncelle
     const talepKeys = [
-      "fullName",
-      "passportNo",
-      "phone",
-      "lokasyon",
-      "kategori",
-      "arac",
-      "sofor",
-      "atamaDurumu",
-      "transferTarihi",
-      "transferSaati",
-      "talepDurumu",
-      "talepEdenId",
-      "isDurumu",
-      "atamaYapanId",
-      "atamaYapanAdSoyad",
-      "uetdsSeferReferansNo",
-      "lokasyonSonDegistirenId",
-      "description",
+      "fullName","passportNo","phone","lokasyon","kategori",
+      "arac","sofor","atamaDurumu","transferTarihi","transferSaati",
+      "talepDurumu","talepEdenId","isDurumu","atamaYapanId","atamaYapanAdSoyad",
+      "uetdsSeferReferansNo","lokasyonSonDegistirenId","description",
     ];
     const talepSet = pick(srcTalep, talepKeys);
 
-    let talepDoc = existingTalep;
     if (Object.keys(talepSet).length) {
-      talepDoc = await Talepler.findByIdAndUpdate(
+      await Talepler.findByIdAndUpdate(
         talepId,
         { $set: talepSet, $setOnInsert: { requestType: "hasta" } },
         { new: true, session, runValidators: true }
       );
     }
 
-    // 2) HastaDetay — verildiyse güncelle / yoksa oluştur (upsert)
+    // HastaDetay — verildiyse güncelle / yoksa oluştur (upsert)
     const detayKeys = [
-      "bolge",
-      "country",
-      "language",
-      "wheelchair",
-      "donusTarihi",
-      "donusSaati",
-      "refakatciSayisi",
-      "bagajSayisi",
-      "aciklama",
-      "isBaslamaZamani",
-      "isBitisZamani",
-      "iptalZamani",
-      "iptalNedeni",
+      "bolge","country","language","wheelchair",
+      "donusTarihi","donusSaati","refakatciSayisi","bagajSayisi",
+      "aciklama","isBaslamaZamani","isBitisZamani","iptalZamani","iptalNedeni",
     ];
     const setDetay = pick(srcDetay, detayKeys);
 
-    // embedded listeleri normalize et
-    const newCompanionIds = await ensureCompanionIds(
-      srcDetay.companions,
-      session
-    ); // null/[]/id[] davranışı
-    const newRouteIds = await ensureRouteIds(srcDetay.routes, session);
-    const newNotifId = await ensureNotificationId(
-      srcDetay.notificationPerson,
-      session
-    );
+    const newCompanionIds = await ensureCompanionIds(srcDetay.companions, session); // null/[]/id[]
+    const newRouteIds     = await ensureRouteIds(srcDetay.routes, session);
+    const newNotifId      = await ensureNotificationId(srcDetay.notificationPerson, session);
 
     if (newCompanionIds !== null) setDetay.companions = newCompanionIds;
-    if (newRouteIds !== null) setDetay.routes = newRouteIds;
+    if (newRouteIds !== null)     setDetay.routes     = newRouteIds;
     if (newNotifId !== undefined) setDetay.notificationPerson = newNotifId;
 
     const detayDoc = await HastaDetay.findOneAndUpdate(
@@ -281,31 +248,19 @@ exports.updateCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // 3) Dönüşte, **populate** edilmiş birleşik obje verelim
+    // Dönüşte populate
     const populatedTalep = await Talepler.findById(talepId)
       .populate([
         { path: "lokasyon" },
         { path: "arac" },
-        {
-          path: "sofor",
-          select: "-password -resetPasswordToken -resetPasswordExpires -__v",
-        },
-        {
-          path: "talepEdenId",
-          select: "-password -resetPasswordToken -resetPasswordExpires -__v",
-        },
-        {
-          path: "atamaYapanId",
-          select: "-password -resetPasswordToken -resetPasswordExpires -__v",
-        },
-        {
-          path: "lokasyonSonDegistirenId",
-          select: "-password -resetPasswordToken -resetPasswordExpires -__v",
-        },
+        { path: "sofor", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "talepEdenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "atamaYapanId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
+        { path: "lokasyonSonDegistirenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
       ])
       .lean();
 
-    const populatedDetay = await HastaDetay.findOne({ talep_id: talepId })
+    const populatedDetay = await HastaDetay.findById(detayDoc._id)
       .populate([
         { path: "companions" },
         { path: "routes" },
@@ -317,11 +272,9 @@ exports.updateCombined = async (req, res) => {
 
     return res.json({
       message: "Hasta talep ve detay başarıyla güncellendi",
-      data: {
-        talep: populatedTalep,
-        detay: populatedDetay || null,
-      },
+      data: { talep: populatedTalep, detay: populatedDetay || null },
     });
+
   } catch (err) {
     await session.abortTransaction().catch(() => {});
     session.endSession();
