@@ -921,30 +921,60 @@ exports.islerim = async (req, res) => {
 
 exports.isAtamalarim = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { requestType, sofor, lokasyon, page = 1, limit = 20 } = req.query;
 
-    // Giriş yapan kullanıcı ID’si (JWT middleware’den geliyor)
-    const userIdRaw = req.user?._id || req.userId;
-    if (!userIdRaw) {
-      return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
+    // ---- Kullanıcının lokasyonlarını topla ----
+    const user = req.user || {};
+    let userLokasyonIds = [];
+
+    if (req.lokasyonId) {
+      userLokasyonIds.push(new ObjectId(req.lokasyonId.toString()));
+    }
+    if (Array.isArray(user.lokasyonlar) && user.lokasyonlar.length) {
+      userLokasyonIds.push(
+        ...user.lokasyonlar
+          .filter(Boolean)
+          .map((l) => new ObjectId(l.toString()))
+      );
+    }
+    if (user.lokasyon) {
+      userLokasyonIds.push(new ObjectId(user.lokasyon.toString()));
     }
 
-    if (!ObjectId.isValid(String(userIdRaw))) {
-      return res.status(400).json({ error: "Geçersiz kullanıcı ID" });
-    }
-    const meId = new ObjectId(String(userIdRaw));
+    // Duplicate temizle
+    userLokasyonIds = [
+      ...new Set(userLokasyonIds.map((id) => id.toString())),
+    ].map((id) => new ObjectId(id));
 
-    // --- FİLTRE ---
-    const q = {
-      atamaYapanId: meId, // benim atadığım işler
-      atamaDurumu: "Evet", // gerçekten ataması yapılmış olanlar
-    };
+    if (!userLokasyonIds.length) {
+      return res
+        .status(400)
+        .json({ error: "Kullanıcının lokasyon bilgisi eksik." });
+    }
+
+    // ---- Ana filtre nesnesi ----
+    const q = {};
+    // Zorunlu filtre: sadece ataması yapılmamış olanlar
+    q.atamaDurumu = "Evet";
+
+    // Diğer filtreler:
+    if (requestType) q.requestType = requestType;
+    if (sofor && isId(sofor)) q.sofor = sofor;
+
+    // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
+    if (lokasyon && isId(lokasyon)) {
+      const lokId = new ObjectId(lokasyon);
+      const isAllowed = userLokasyonIds.some((u) => u.equals(lokId));
+      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000"); // yetkisizse boş döner
+    } else {
+      q.lokasyon = { $in: userLokasyonIds };
+    }
 
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam
-    const [items, total] = await Promise.all([
+    // Sorgu + toplam sayım
+    const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
@@ -956,22 +986,101 @@ exports.isAtamalarim = async (req, res) => {
           { path: "talepEdenId", select: userSelectExclude },
           { path: "atamaYapanId", select: userSelectExclude },
           { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ]),
+        ])
+        .lean(),
       Talepler.countDocuments(q),
     ]);
 
-    // Cevap
-    return res.json({
+    // ---- Detayları toplu halde çek (N+1 yerine batched) ----
+    const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
+
+    for (const t of rawItems) {
+      const id = t?._id?.toString();
+      if (!id) continue;
+      const rt = (t.requestType || "").toLowerCase();
+      if (idsByType[rt]) idsByType[rt].push(id);
+    }
+
+    const POPULATE_HASTA_MISAFIR = [
+      { path: "companions" },
+      { path: "routes" },
+      { path: "notificationPerson" },
+      { path: "bolge" },
+      { path: "country" },
+    ];
+    const POPULATE_PERSONEL = [{ path: "companions" }];
+
+    const [
+      hastaDetayList,
+      personelDetayList,
+      misafirDetayList,
+      digerDetayList,
+    ] = await Promise.all([
+      idsByType.hasta.length
+        ? HastaDetay.find({ talep_id: { $in: idsByType.hasta } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.personel.length
+        ? PersonelDetay.find({ talep_id: { $in: idsByType.personel } })
+            .populate(POPULATE_PERSONEL)
+            .lean()
+        : [],
+      idsByType.misafir.length
+        ? MisafirDetay.find({ talep_id: { $in: idsByType.misafir } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.diger.length
+        ? DigerDetay.find({ talep_id: { $in: idsByType.diger } }).lean()
+        : [],
+    ]);
+
+    // talep_id -> detay map
+    const detayMap = new Map();
+    for (const d of hastaDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList)  detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList)    detayMap.set(String(d.talep_id), d);
+
+    // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
+    const needsCoord = new Set(["hasta", "misafir"]);
+    for (const t of rawItems) {
+      const rt = (t.requestType || "").toLowerCase();
+      const d  = detayMap.get(String(t._id));
+      if (!d) continue;
+
+      if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
+        d.routes = await Promise.all(
+          d.routes.map(async (r) => {
+            const base = r?.toObject ? r.toObject() : r;
+            const out = { ...base };
+            out.pickup = await addKordinatFlexible(base.pickup);
+            out.drop   = await addKordinatFlexible(base.drop);
+            return out;
+          })
+        );
+      }
+    }
+
+    // Son liste: item + detay
+    const items = rawItems.map((t) => {
+      const d = detayMap.get(String(t._id)) || null;
+      return { ...t, detay: d };
+    });
+
+    // Yanıt (şema aynı, sadece her item’da `detay` var)
+    res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
+      filters: { startDate: null, endDate: null },
     });
   } catch (err) {
-    console.error("❌ myIsAtamalarim hata:", err);
-    return res.status(500).json({
-      message: "Atadığın işler listelenemedi.",
-      error: err.message,
-    });
+    console.error("❌ aracTalep listesi alınamadı:", err);
+    res
+      .status(500)
+      .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
