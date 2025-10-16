@@ -42,29 +42,63 @@ const userSelectExclude =
 
 // ---------------------- CRUD (değiştirmeden, ufak temizliklerle) ----------------------
 
+const getLocModelAndNameField = (type) => {
+  const t = String(type || "").toLowerCase();
+  if (t === "otel") {
+    return {
+      Model: require("../models/otel/otel.model.js"),
+      nameField: "otelAdi",
+    };
+  }
+  if (t === "hastane") {
+    return {
+      Model: require("../models/hastane/hastane.model"),
+      // şemana göre güncelle
+      nameField: "hastaneAdi",
+    };
+  }
+  if (t === "havaalani" || t === "havalimani") {
+    return {
+      Model: require("../models/havalimanı/havalimani.model.js"),
+      // şemana göre güncelle
+      nameField: "havalimaniAdi",
+    };
+  }
+  return { Model: null, nameField: null };
+};
+
 const addKordinatToOne = async (obj) => {
   if (!obj || typeof obj !== "object") return obj;
   if (!obj.type || !obj.locationId) return obj;
 
-  const M = getLocModel(obj.type);
-  if (!M) return obj;
+  const { Model, nameField } = getLocModelAndNameField(obj.type);
+  if (!Model) return obj;
 
-  const doc = await M.findById(obj.locationId)
-    .select("kordinat")
+  const selectFields = ["kordinat"];
+  if (nameField) selectFields.push(nameField);
+
+  const doc = await Model.findById(obj.locationId)
+    .select(selectFields.join(" "))
     .lean()
     .catch(() => null);
 
-  return { ...obj, kordinat: doc?.kordinat ?? null };
+  const out = { ...obj };
+  out.kordinat = doc?.kordinat ?? obj.kordinat ?? null;
+
+  // locationName boşsa, tip-özel ad alanından doldur
+  if (!out.locationName && doc && nameField && doc[nameField]) {
+    out.locationName = doc[nameField];
+  }
+  return out;
 };
 
 const addKordinatFlexible = async (val) => {
   if (Array.isArray(val)) {
-    const updated = await Promise.all(val.map(addKordinatToOne));
-    return updated;
+    return await Promise.all(val.map(addKordinatToOne));
   }
   return await addKordinatToOne(val);
 };
-/* ----------------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------------------- */
 
 exports.aracTalep = async (req, res) => {
   try {
@@ -139,12 +173,7 @@ exports.aracTalep = async (req, res) => {
     ]);
 
     // ---- Detayları toplu halde çek (N+1 yerine batched) ----
-    const idsByType = {
-      hasta: [],
-      personel: [],
-      misafir: [],
-      diger: [],
-    };
+    const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
 
     for (const t of rawItems) {
       const id = t?._id?.toString();
@@ -153,7 +182,6 @@ exports.aracTalep = async (req, res) => {
       if (idsByType[rt]) idsByType[rt].push(id);
     }
 
-    // Her tip için uygun populate setleri
     const POPULATE_HASTA_MISAFIR = [
       { path: "companions" },
       { path: "routes" },
@@ -161,10 +189,7 @@ exports.aracTalep = async (req, res) => {
       { path: "bolge" },
       { path: "country" },
     ];
-
-    const POPULATE_PERSONEL = [
-      { path: "companions" }, // personelde sadece companions vardı (isteğe göre arttırılabilir)
-    ];
+    const POPULATE_PERSONEL = [{ path: "companions" }];
 
     const [
       hastaDetayList,
@@ -194,12 +219,12 @@ exports.aracTalep = async (req, res) => {
 
     // talep_id -> detay map
     const detayMap = new Map();
-    for (const d of hastaDetayList)   detayMap.set(String(d.talep_id), d);
-    for (const d of personelDetayList)detayMap.set(String(d.talep_id), d);
-    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
-    for (const d of digerDetayList)   detayMap.set(String(d.talep_id), d);
+    for (const d of hastaDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList)  detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList)    detayMap.set(String(d.talep_id), d);
 
-    // Hasta/Misafir için routes.pickup/drop içine kordinat ekle
+    // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
     const needsCoord = new Set(["hasta", "misafir"]);
     for (const t of rawItems) {
       const rt = (t.requestType || "").toLowerCase();
