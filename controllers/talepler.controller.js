@@ -662,21 +662,16 @@ exports.aracIsEmri = async (req, res) => {
 
     // ---- Ana filtre nesnesi ----
     const q = {};
+    q.atamaDurumu = "Evet"; // iş emri olanlar
 
-    // Zorunlu filtre: sadece ataması yapılmamış olanlar
-    q.atamaDurumu = "Evet";
-
-    // (TARİH FİLTRESİ KALDIRILDI) => q.transferTarihi eklenmiyor
-
-    // Diğer filtreler:
     if (requestType) q.requestType = requestType;
     if (sofor && isId(sofor)) q.sofor = sofor;
 
-    // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
+    // Lokasyon filtresi
     if (lokasyon && isId(lokasyon)) {
       const lokId = new ObjectId(lokasyon);
       const isAllowed = userLokasyonIds.some((u) => u.equals(lokId));
-      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000"); // yetkisizse boş döner
+      q.lokasyon = isAllowed ? lokId : new ObjectId("000000000000000000000000");
     } else {
       q.lokasyon = { $in: userLokasyonIds };
     }
@@ -685,9 +680,9 @@ exports.aracIsEmri = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     // Sorgu + toplam sayım
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 }) // sıralama aynı kalsın
+        .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
         .populate([
@@ -697,24 +692,121 @@ exports.aracIsEmri = async (req, res) => {
           { path: "talepEdenId", select: userSelectExclude },
           { path: "atamaYapanId", select: userSelectExclude },
           { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ]),
+        ])
+        .lean(),
       Talepler.countDocuments(q),
     ]);
 
-    // Yanıt şeması aynı
+    // ---- Detaylar (hasta/personel/misafir/diger) ----
+    const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
+    for (const t of rawItems) {
+      const id = t?._id?.toString();
+      if (!id) continue;
+      const rt = (t.requestType || "").toLowerCase();
+      if (idsByType[rt]) idsByType[rt].push(id);
+    }
+
+    const POPULATE_HASTA_MISAFIR = [
+      { path: "companions" },
+      { path: "routes" },
+      { path: "notificationPerson" },
+      { path: "bolge" },
+      { path: "country" },
+    ];
+    const POPULATE_PERSONEL = [{ path: "companions" }];
+
+    const [
+      hastaDetayList,
+      personelDetayList,
+      misafirDetayList,
+      digerDetayList,
+    ] = await Promise.all([
+      idsByType.hasta.length
+        ? HastaDetay.find({ talep_id: { $in: idsByType.hasta } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.personel.length
+        ? PersonelDetay.find({ talep_id: { $in: idsByType.personel } })
+            .populate(POPULATE_PERSONEL)
+            .lean()
+        : [],
+      idsByType.misafir.length
+        ? MisafirDetay.find({ talep_id: { $in: idsByType.misafir } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.diger.length
+        ? DigerDetay.find({ talep_id: { $in: idsByType.diger } }).lean()
+        : [],
+    ]);
+
+    // Map oluştur
+    const detayMap = new Map();
+    for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
+
+    // Hasta/Misafir için kordinat + locationName
+    const needsCoord = new Set(["hasta", "misafir"]);
+    for (const t of rawItems) {
+      const rt = (t.requestType || "").toLowerCase();
+      const d = detayMap.get(String(t._id));
+      if (!d) continue;
+
+      if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
+        d.routes = await Promise.all(
+          d.routes.map(async (r) => {
+            const base = r?.toObject ? r.toObject() : r;
+            const out = { ...base };
+            out.pickup = await addKordinatFlexible(base.pickup);
+            out.drop = await addKordinatFlexible(base.drop);
+            return out;
+          })
+        );
+      }
+    }
+
+    // Nihai dönüş (detaylı JSON)
+    const items = rawItems.map((t) => {
+      const detay = detayMap.get(String(t._id)) || null;
+      let nereden = "-",
+        nereye = "-",
+        kisiSayisi = "-",
+        tarihSaat = "-";
+
+      if (detay?.routes?.length) {
+        const r = detay.routes[0];
+        nereden = r?.pickup?.locationName || "-";
+        nereye = r?.drop?.locationName || "-";
+        kisiSayisi = r?.pickup?.person || r?.drop?.person || "-";
+        const date = r?.pickup?.date || r?.drop?.date;
+        tarihSaat = date ? new Date(date).toLocaleString("tr-TR") : "-";
+      }
+
+      return {
+        ...t,
+        detay,
+        nereden,
+        nereye,
+        kisiSayisi,
+        tarihSaat,
+      };
+    });
+
     res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
-      // filters alanını istersen tamamen kaldırabilirsin; bırakırsak boş döndürelim
       filters: { startDate: null, endDate: null },
     });
   } catch (err) {
-    console.error("❌ aracTalep listesi alınamadı:", err);
+    console.error("❌ aracIsEmri listesi alınamadı:", err);
     res
       .status(500)
-      .json({ message: "Talepler listelenemedi", error: err.message });
+      .json({ message: "İş emirleri listelenemedi", error: err.message });
   }
 };
 
