@@ -33,6 +33,13 @@ const PersonelTalepDetaySchema = new mongoose.Schema(
       enum: ["Şoförlü", "Şoförsüz"],
       default: null,
     },
+    routes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Routes",
+        default: undefined,
+      },
+    ],
 
     alinacakYer: { type: String, default: "" },
     birakilacakYer: { type: String, default: "" },

@@ -95,8 +95,31 @@ exports.create = async (req, res) => {
       });
     }
 
-    // companions normalize
+    // companions normalize (mevcut davranış)
     const companionIds = await ensureCompanionIds(body.companions, talep_id, null);
+
+    // routes normalize (hasta örneği ile aynı mantık)
+    async function ensureRouteIds(arr, talepId, session) {
+      if (!Array.isArray(arr) || !arr.length) return [];
+      const ids = [], toInsert = [];
+      for (const r of arr) {
+        if (typeof r === "string" && isId(r)) {
+          ids.push(new mongoose.Types.ObjectId(r));
+        } else if (r && typeof r === "object") {
+          toInsert.push({
+            talep_id: talepId || null,
+            pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
+            drop:   r.drop   || r.to     || {},
+          });
+        }
+      }
+      if (toInsert.length) {
+        const inserted = await Routes.insertMany(toInsert, { session });
+        ids.push(...inserted.map((d) => d._id));
+      }
+      return ids;
+    }
+    const routeIds = await ensureRouteIds(body.routes, talep_id, null);
 
     // Yeni şema alanları
     const fields = [
@@ -122,12 +145,15 @@ exports.create = async (req, res) => {
       ...pick(body, fields),
       talep_id: talep_id || null,
       companions: companionIds.length ? companionIds : undefined,
+      routes: routeIds.length ? routeIds : undefined,
     };
 
     const doc = await PersonelDetay.create(payload);
 
+    // Dönüşte companions + routes populate
     const populatedDetay = await PersonelDetay.findById(doc._id)
-      .populate(DETAY_POPULATE)
+      .populate({ path: "companions" })
+      .populate({ path: "routes" })
       .lean();
 
     return res.status(201).json({
@@ -181,7 +207,7 @@ exports.createCombined = async (req, res) => {
     // 1) Talep oluştur
     const [talepDoc] = await Talepler.create([talepPayload], { session });
 
-    // 2) companions normalize
+    // 2) companions normalize (mevcut davranış: detay > talep fallback)
     const companionsIn = Array.isArray(srcDetay.companions)
       ? srcDetay.companions
       : Array.isArray(srcTalep.companions)
@@ -189,7 +215,37 @@ exports.createCombined = async (req, res) => {
       : [];
     const companionIds = await ensureCompanionIds(companionsIn, talepDoc._id, session);
 
-    // 3) PersonelDetay oluştur (yeni şema alanları)
+    // 3) routes normalize (hasta örneği gibi sadece detay’dan almayı tercih edebilirdik,
+    // ancak mevcut companions mantığıyla tutarlılık için önce detay, yoksa talep’ten oku)
+    async function ensureRouteIds(arr, talepId, session) {
+      if (!Array.isArray(arr) || !arr.length) return [];
+      const ids = [], toInsert = [];
+      for (const r of arr) {
+        if (typeof r === "string" && isId(r)) {
+          ids.push(new mongoose.Types.ObjectId(r));
+        } else if (r && typeof r === "object") {
+          toInsert.push({
+            talep_id: talepId || null,
+            pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
+            drop:   r.drop   || r.to     || {},
+          });
+        }
+      }
+      if (toInsert.length) {
+        const inserted = await Routes.insertMany(toInsert, { session });
+        ids.push(...inserted.map((d) => d._id));
+      }
+      return ids;
+    }
+    const routesIn =
+      Array.isArray(srcDetay.routes)
+        ? srcDetay.routes
+        : Array.isArray(srcTalep.routes)
+        ? srcTalep.routes
+        : [];
+    const routeIds = await ensureRouteIds(routesIn, talepDoc._id, session);
+
+    // 4) PersonelDetay oluştur (yeni şema alanları)
     const detayKeys = [
       "email",
       "departman",
@@ -212,6 +268,7 @@ exports.createCombined = async (req, res) => {
       ...pick(srcDetay, detayKeys),
       talep_id: talepDoc._id,
       companions: companionIds,
+      routes: routeIds,
     };
 
     const [detayDoc] = await PersonelDetay.create([detayPayload], { session });
@@ -224,7 +281,8 @@ exports.createCombined = async (req, res) => {
       .populate(TALEP_POPULATE)
       .lean();
     const populatedDetay = await PersonelDetay.findById(detayDoc._id)
-      .populate(DETAY_POPULATE)
+      .populate({ path: "companions" })
+      .populate({ path: "routes" })
       .lean();
 
     return res.status(201).json({
@@ -321,13 +379,44 @@ exports.updateByTalepId = async (req, res) => {
       );
     }
 
-    // --- PersonelDetay: companions tri-state + yeni şema alanları ---
+    // --- PersonelDetay: companions tri-state + routes tri-state + yeni şema alanları ---
     const inDetay = body.detay || {};
+
     const companionsIn = body.hasOwnProperty("companions")
       ? body.companions
       : inDetay.companions;
 
     const newCompanionIds = await ensureCompanionIdsForUpdate(companionsIn, talepId, session);
+
+    // routes tri-state (undefined -> dokunma, [] -> boşalt, [id|obj] -> set/insert)
+    async function ensureRouteIdsForUpdate(arr, talepId, session) {
+      if (arr === undefined) return null;   // dokunma
+      if (!Array.isArray(arr)) return null; // beklenmedik format -> dokunma
+      if (arr.length === 0) return [];      // boşalt
+      const ids = [], toInsert = [];
+      for (const r of arr) {
+        if (typeof r === "string" && isId(r)) {
+          ids.push(new mongoose.Types.ObjectId(r));
+        } else if (r && typeof r === "object") {
+          toInsert.push({
+            talep_id: talepId || null,
+            pickup: r.pickup || r.pickUp || r.gidis || r.from || {},
+            drop:   r.drop   || r.to     || {},
+          });
+        }
+      }
+      if (toInsert.length) {
+        const inserted = await Routes.insertMany(toInsert, { session });
+        ids.push(...inserted.map((d) => d._id));
+      }
+      return ids;
+    }
+
+    const routesIn = body.hasOwnProperty("routes")
+      ? body.routes
+      : inDetay.routes;
+
+    const newRouteIds = await ensureRouteIdsForUpdate(routesIn, talepId, session);
 
     const fields = [
       "email",
@@ -351,6 +440,7 @@ exports.updateByTalepId = async (req, res) => {
 
     const updateDoc = { $set: baseSet };
     if (newCompanionIds !== null) updateDoc.$set.companions = newCompanionIds;
+    if (newRouteIds !== null)     updateDoc.$set.routes     = newRouteIds;
 
     const updated = await PersonelDetay.findOneAndUpdate(
       { talep_id: talepId },
@@ -375,7 +465,8 @@ exports.updateByTalepId = async (req, res) => {
       .populate(TALEP_POPULATE)
       .lean();
     const populatedDetay = await PersonelDetay.findById(updated._id)
-      .populate(DETAY_POPULATE)
+      .populate({ path: "companions" })
+      .populate({ path: "routes" })
       .lean();
 
     return res.json({
