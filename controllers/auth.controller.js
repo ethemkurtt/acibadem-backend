@@ -208,7 +208,7 @@ exports.forgotPassword = async (req, res) => {
     user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 saat
     await user.save();
 
-    const resetUrl = `${FRONTEND_BASE_URL}/sifre-sifirla/verify?token=${rawToken}`;
+    const resetUrl = `${FRONTEND_BASE_URL}/sifre-sifirla?token=${rawToken}`;
 
     const html = `
   <div style="background:#f9fafb;padding:32px 0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
