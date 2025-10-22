@@ -4,8 +4,8 @@ const Talepler = require("../models/talepler/talepler.model");
 const {
   Types: { ObjectId },
 } = require("mongoose");
-const Hastane    = require("../models/hastane/hastane.model.js");
-const Otel       = require("../models/otel/otel.model.js");
+const Hastane = require("../models/hastane/hastane.model.js");
+const Otel = require("../models/otel/otel.model.js");
 const Havalimani = require("../models/havalimanı/havalimani.model.js");
 // Tip-özel detay modelleri
 const HastaDetay = require("../models/talepler/hastaTalepDetay.model");
@@ -219,16 +219,16 @@ exports.aracTalep = async (req, res) => {
 
     // talep_id -> detay map
     const detayMap = new Map();
-    for (const d of hastaDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
-    for (const d of misafirDetayList)  detayMap.set(String(d.talep_id), d);
-    for (const d of digerDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
     // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
     const needsCoord = new Set(["hasta", "misafir"]);
     for (const t of rawItems) {
       const rt = (t.requestType || "").toLowerCase();
-      const d  = detayMap.get(String(t._id));
+      const d = detayMap.get(String(t._id));
       if (!d) continue;
 
       if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
@@ -237,7 +237,7 @@ exports.aracTalep = async (req, res) => {
             const base = r?.toObject ? r.toObject() : r;
             const out = { ...base };
             out.pickup = await addKordinatFlexible(base.pickup);
-            out.drop   = await addKordinatFlexible(base.drop);
+            out.drop = await addKordinatFlexible(base.drop);
             return out;
           })
         );
@@ -265,8 +265,6 @@ exports.aracTalep = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
-
-
 
 exports.create = async (req, res) => {
   try {
@@ -372,7 +370,8 @@ exports.getById = async (req, res) => {
     // (addKordinatToRoutes, fetchKordinat/getModel yardımcılarını yukarıda eklemiştin)
     let result = doc.toObject();
     if (doc.requestType === "hasta" || doc.requestType === "misafir") {
-      const DetayModel = doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
+      const DetayModel =
+        doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
       const d = await DetayModel.findOne({ talep_id: id })
         .populate([{ path: "routes" }])
         .lean();
@@ -574,7 +573,7 @@ exports.getFullById = async (req, res) => {
         .lean();
     } else if (talep.requestType === "personel") {
       detay = await PersonelDetay.findOne({ talep_id: id })
-        .populate([{ path: "companions" }])
+        .populate([{ path: "companions" }, { path: "routes" }])
         .lean();
     } else if (talep.requestType === "misafir") {
       detay = await MisafirDetay.findOne({ talep_id: id })
@@ -603,7 +602,7 @@ exports.getFullById = async (req, res) => {
           const out = { ...base };
 
           out.pickup = await addKordinatFlexible(base.pickup);
-          out.drop   = await addKordinatFlexible(base.drop);
+          out.drop = await addKordinatFlexible(base.drop);
 
           return out;
         })
@@ -625,7 +624,6 @@ exports.getFullById = async (req, res) => {
       .json({ ok: false, message: "Internal Server Error" });
   }
 };
-
 
 exports.aracIsEmri = async (req, res) => {
   try {
@@ -1038,16 +1036,16 @@ exports.isAtamalarim = async (req, res) => {
 
     // talep_id -> detay map
     const detayMap = new Map();
-    for (const d of hastaDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
-    for (const d of misafirDetayList)  detayMap.set(String(d.talep_id), d);
-    for (const d of digerDetayList)    detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
     // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
     const needsCoord = new Set(["hasta", "misafir"]);
     for (const t of rawItems) {
       const rt = (t.requestType || "").toLowerCase();
-      const d  = detayMap.get(String(t._id));
+      const d = detayMap.get(String(t._id));
       if (!d) continue;
 
       if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
@@ -1056,7 +1054,7 @@ exports.isAtamalarim = async (req, res) => {
             const base = r?.toObject ? r.toObject() : r;
             const out = { ...base };
             out.pickup = await addKordinatFlexible(base.pickup);
-            out.drop   = await addKordinatFlexible(base.drop);
+            out.drop = await addKordinatFlexible(base.drop);
             return out;
           })
         );
