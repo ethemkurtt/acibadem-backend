@@ -61,7 +61,7 @@ router.get("/users", userController.getAllUsers);
 router.get("/users/:id", userController.getUserById);
 router.put("/users/:id", validateRequest(userSchemas.update), userController.updateUser);
 // router.delete("/users/:id", userController.deleteUser);
-router.post("/users", validateRequest(userSchemas.create), userController.createUser);
+router.post("/users",  userController.createUser);
 router.get("/soforler",  userController.getSoforler);
 // Sadece superadmin erişimi olan örnek endpoint
 router.get(

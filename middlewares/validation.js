@@ -160,7 +160,7 @@ const authSchemas = {
   
   resetPassword: Joi.object({
     token: Joi.string().required(),
-    password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).required()
+    password: Joi.string().min(6).required()
   })
 };
 

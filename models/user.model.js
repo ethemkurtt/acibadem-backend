@@ -4,49 +4,33 @@ const RoleGroup = require("./roleGroup.model"); // roleGroupId doğrulaması iç
 
 const userSchema = new mongoose.Schema(
   {
-    // Kimlik
+   
     name:     { type: String, required: true, trim: true },
     email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
 
-    // Organizasyon / Rol
     organizasyon:  { type: String, required: true, trim: true },
     personelGrubu: { type: String, required: true, trim: true },
-    roleGroupId:   { type: String, required: true, trim: true }, // RoleGroup.roleGroupId ile string eşleşme
+    roleGroupId:   { type: String, required: true, trim: true }, 
 
-    // Serbest yetki alanı (gönderdiğin formatta saklanır)
-    // Örn: { "talep.view": 1, "tanim.sofor.create": true, "custom": { canExport: true } }
     yetkiler: {
       type: Map,
       of: mongoose.Schema.Types.Mixed,
       default: {},
     },
-
-    // (opsiyonel) ekstra string lokasyon etiketleri
     locations: { type: [String], default: [] },
-
-    // Profil / İlgili referanslar
     tc:        { type: String, default: null },
     departman: { type: mongoose.Schema.Types.ObjectId, ref: "Departman", default: null },
-
-    // Çoklu lokasyon (yeni)
     lokasyonlar: [{ type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon" }],
-
-    // Legacy tekil lokasyon (geri uyumluluk)
     lokasyon: { type: mongoose.Schema.Types.ObjectId, ref: "Lokasyon", default: null },
-
     bolge: { type: mongoose.Schema.Types.ObjectId, ref: "Bolge", default: null },
     ulke:  { type: mongoose.Schema.Types.ObjectId, ref: "Ulke", default: null },
-
-    // Diğer alanlar
     musaitlik:   { type: Boolean, default: true },
     telefon:     { type: String, default: null },
     mail:        { type: String, default: null },
     dogumTarihi: { type: Date, default: null },
     cinsiyet:    { type: String, enum: ["Erkek", "Kadın", "Diğer"], default: null },
     ehliyet:     { type: Boolean, default: false },
-
-    // Şifre sıfırlama
     resetPasswordToken:   { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
   },
