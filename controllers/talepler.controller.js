@@ -189,7 +189,7 @@ exports.aracTalep = async (req, res) => {
       { path: "bolge" },
       { path: "country" },
     ];
-    const POPULATE_PERSONEL = [{ path: "companions" }];
+    const POPULATE_PERSONEL = [{ path: "companions" }, { path: "routes" }];
 
     const [
       hastaDetayList,
