@@ -225,7 +225,7 @@ exports.aracTalep = async (req, res) => {
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
     // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
-    const needsCoord = new Set(["hasta", "misafir"]);
+    const needsCoord = new Set(["hasta", "misafir","personel"]);
     for (const t of rawItems) {
       const rt = (t.requestType || "").toLowerCase();
       const d = detayMap.get(String(t._id));
