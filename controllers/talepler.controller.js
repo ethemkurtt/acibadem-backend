@@ -137,6 +137,8 @@ exports.aracTalep = async (req, res) => {
     const q = {};
     // Zorunlu filtre: sadece ataması yapılmamış olanlar
     q.atamaDurumu = "Hayır";
+    // Tamamlanmış işler gelmesin
+    q.isDurumu = { $ne: "Tamamlandı" };
 
     // Diğer filtreler:
     if (requestType) q.requestType = requestType;
@@ -151,26 +153,19 @@ exports.aracTalep = async (req, res) => {
       q.lokasyon = { $in: userLokasyonIds };
     }
 
-    // Sayfalama
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // Sorgu + toplam sayım
-    const [rawItems, total] = await Promise.all([
-      Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ])
-        .lean(),
-      Talepler.countDocuments(q),
-    ]);
+    // ⚠️ Filtreleme/sıralama route tarihlerine göre yapılacağı için,
+    // önce tüm adayları çekiyoruz; sonra bellekte filtreleyip sıralayacağız.
+    const rawItems = await Talepler.find(q)
+      .sort({ createdAt: -1 }) // geçici; gerçek sıralamayı aşağıda yapacağız
+      .populate([
+        { path: "lokasyon" },
+        { path: "sofor", select: userSelectExclude },
+        { path: "arac" },
+        { path: "talepEdenId", select: userSelectExclude },
+        { path: "atamaYapanId", select: userSelectExclude },
+        { path: "lokasyonSonDegistirenId", select: userSelectExclude },
+      ])
+      .lean();
 
     // ---- Detayları toplu halde çek (N+1 yerine batched) ----
     const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
@@ -217,46 +212,129 @@ exports.aracTalep = async (req, res) => {
         : [],
     ]);
 
-    // talep_id -> detay map
     const detayMap = new Map();
     for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
-    // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
-    const needsCoord = new Set(["hasta", "misafir","personel"]);
+    // Yardımcılar: tarih çıkarımı
+    const normDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+    const IST_TODAY_START = (() => {
+      const now = new Date();
+      // Sunucu TZ'sini kullanıyoruz; ihtiyaca göre Europe/Istanbul’a sabitlenebilir.
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    })();
+
+    // routes içinden başlangıç(ilk pickup) ve bitiş(son drop) hesapla + kordinat backfill
+    const needsCoord = new Set(["hasta", "misafir", "personel"]);
+    const computed = []; // { item, detay, start, end }
+
     for (const t of rawItems) {
       const rt = (t.requestType || "").toLowerCase();
-      const d = detayMap.get(String(t._id));
-      if (!d) continue;
+      const d = detayMap.get(String(t._id)) || null;
 
-      if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
-        d.routes = await Promise.all(
+      // default: transferTarihi yedeği
+      let start = null;
+      let end = null;
+
+      if (d && Array.isArray(d.routes) && d.routes.length) {
+        // koordinat & name backfill ve min/max tarih çıkarımı
+        const processedRoutes = await Promise.all(
           d.routes.map(async (r) => {
             const base = r?.toObject ? r.toObject() : r;
             const out = { ...base };
-            out.pickup = await addKordinatFlexible(base.pickup);
-            out.drop = await addKordinatFlexible(base.drop);
+
+            // backfill (opsiyonel)
+            if (needsCoord.has(rt)) {
+              out.pickup = await addKordinatFlexible(base.pickup);
+              out.drop = await addKordinatFlexible(base.drop);
+            }
+
+            // tarih çıkarımı
+            const pickupArr = toArray(out.pickup);
+            const dropArr = toArray(out.drop);
+
+            const pickupDates = pickupArr
+              .map((p) => normDate(p?.date))
+              .filter(Boolean);
+            const dropDates = dropArr
+              .map((p) => normDate(p?.date))
+              .filter(Boolean);
+
+            const localMinPickup =
+              pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+            const localMaxDrop = dropDates.length
+              ? new Date(Math.max(...dropDates))
+              : pickupDates.length
+              ? new Date(Math.max(...pickupDates))
+              : null;
+
+            if (localMinPickup && (!start || localMinPickup < start)) {
+              start = localMinPickup;
+            }
+            if (localMaxDrop && (!end || localMaxDrop > end)) {
+              end = localMaxDrop;
+            }
+
             return out;
           })
         );
+
+        // detay.routes'i geri yaz
+        if (processedRoutes.length) {
+          d.routes = processedRoutes;
+        }
       }
+
+      // Yedek: routes yoksa transferTarihi’ni dene
+      if (!start) start = normDate(t.transferTarihi);
+      if (!end) end = normDate(t.transferTarihi);
+
+      computed.push({ item: t, detay: d, start, end });
     }
 
-    // Son liste: item + detay
-    const items = rawItems.map((t) => {
-      const d = detayMap.get(String(t._id)) || null;
-      return { ...t, detay: d };
+    // --- Filtre kuralları ---
+    // 1) Tamamlanmışlar zaten q.isDurumu ile elendi
+    // 2) Bitiş tarihi < bugün 00:00 ise gösterme (tamamen geçmiş)
+    const filtered = computed.filter(({ end }) => {
+      if (!end) return false; // tarih yoksa listeleme
+      return end >= IST_TODAY_START;
     });
 
-    // Yanıt (şema aynı, sadece her item’da `detay` var)
+    // --- Sıralama: başlangıç (min pickup) eskiden → yeniye ---
+    filtered.sort((a, b) => {
+      const ax = a.start ? a.start.getTime() : Number.MAX_SAFE_INTEGER;
+      const bx = b.start ? b.start.getTime() : Number.MAX_SAFE_INTEGER;
+      if (ax !== bx) return ax - bx;
+      // eşitlikte createdAt ile bağla
+      const ac = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const bc = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return bc - ac;
+    });
+
+    // --- Sayfalama (filtre + sıralamadan sonra) ---
+    const total = filtered.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paged = filtered.slice(skip, skip + Number(limit));
+
+    // Yanıt: item + detay (eski şemayla uyumlu)
+    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+
     res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
-      filters: { startDate: null, endDate: null },
+      filters: {
+        startDate: IST_TODAY_START.toISOString(),
+        endDate: null, // kural: "bitiş >= bugün", üst sınır yok
+      },
     });
   } catch (err) {
     console.error("❌ aracTalep listesi alınamadı:", err);
@@ -265,6 +343,7 @@ exports.aracTalep = async (req, res) => {
       .json({ message: "Talepler listelenemedi", error: err.message });
   }
 };
+
 
 exports.create = async (req, res) => {
   try {
@@ -417,28 +496,42 @@ exports.assignAracSofor = async (req, res) => {
     const atamaYapanId = req.user?._id || req.userId || null;
     const atamaYapanAdSoyad = req.user?.fullName || req.user?.name || "";
 
+    // --- Geriye dönük uyumlu alan okuma ---
+    const norm = (v) => (typeof v === "string" ? v.trim() : v);
+    const soforIn = norm(req.body.soforId ?? req.body.sofor ?? req.body.driverId);
+    const aracIn  = norm(req.body.aracId  ?? req.body.arac  ?? req.body.vehicleId);
+    const lokIn   = norm(req.body.lokasyonId ?? req.body.lokasyon ?? req.body.locationId);
+
+    const soforProvided = soforIn !== undefined;
+    const aracProvided  = aracIn  !== undefined;
+    const lokProvided   = lokIn   !== undefined;
+
+    const soforValid = soforProvided && isId(soforIn);
+    const aracValid  = aracProvided  && isId(aracIn);
+    const lokValid   = lokProvided   && isId(lokIn);
+
     const update = {
-      atamaDurumu: "Evet",
       atamaYapanId,
       atamaYapanAdSoyad,
     };
 
-    // --- Geriye dönük uyumlu alan okuma ---
-    const norm = (v) => (typeof v === "string" ? v.trim() : v);
-    const soforIn = norm(
-      req.body.soforId ?? req.body.sofor ?? req.body.driverId
-    );
-    const aracIn = norm(req.body.aracId ?? req.body.arac ?? req.body.vehicleId);
-    const lokIn = norm(
-      req.body.lokasyonId ?? req.body.lokasyon ?? req.body.locationId
-    );
-
-    if (soforIn !== undefined) update.sofor = isId(soforIn) ? soforIn : null;
-    if (aracIn !== undefined) update.arac = isId(aracIn) ? aracIn : null;
-    if (lokIn !== undefined) {
-      update.lokasyon = isId(lokIn) ? lokIn : null;
+    if (soforProvided) update.sofor = soforValid ? soforIn : null;
+    if (aracProvided)  update.arac  = aracValid  ? aracIn  : null;
+    if (lokProvided) {
+      update.lokasyon = lokValid ? lokIn : null;
       update.lokasyonSonDegistirenId = atamaYapanId || null;
     }
+
+    // ── Atama durumu mantığı ─────────────────────────────────────────────
+    if (soforValid && aracValid) {
+      // Şoför + araç geçerli -> Evet
+      update.atamaDurumu = "Evet";
+    } else if (!soforProvided && !aracProvided && lokProvided) {
+      // Sadece lokasyon gönderilmiş -> Hayır
+      update.atamaDurumu = "Hayır";
+    }
+    // Diğer durumlarda atamaDurumu'na dokunma (mevcut değer korunur)
+    // ────────────────────────────────────────────────────────────────────
 
     const item = await Talepler.findByIdAndUpdate(id, update, {
       new: true,
@@ -452,12 +545,10 @@ exports.assignAracSofor = async (req, res) => {
 
     if (!item) return res.status(404).json({ error: "Talep bulunamadı" });
 
-    return res.json({ message: "Atama başarılı", item });
+    return res.json({ message: "Güncelleme başarılı", item });
   } catch (err) {
     console.error("❌ assignAracSofor hata:", err);
-    return res
-      .status(500)
-      .json({ error: "Atama yapılamadı", details: err.message });
+    return res.status(500).json({ error: "Atama yapılamadı", details: err.message });
   }
 };
 exports.updateUetdsSeferReferansNo = async (req, res) => {
