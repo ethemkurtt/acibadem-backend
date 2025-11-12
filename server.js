@@ -14,6 +14,9 @@ const app = express();
 // ---- Config ----
 dotenv.config();
 
+// ⚡ OPTIMIZE: Cache Service
+const cacheService = require("./utils/cacheService");
+
 // ---- Middleware ----
 app.use(cors());
 app.use(express.json());
@@ -102,6 +105,33 @@ mongoose
   .then(() => console.log("✅ MongoDB bağlantısı başarılı"))
   .catch((err) => console.error("❌ MongoDB bağlantı hatası:", err));
 
+// ⚡ OPTIMIZE: Redis bağlantısı (opsiyonel)
+cacheService
+  .connect()
+  .then(() => {
+    if (cacheService.isReady) {
+      console.log("⚡ Cache sistemi aktif - Performans optimizasyonu çalışıyor");
+    } else {
+      console.log("⚠️  Cache sistemi devre dışı - Normal modda çalışıyor");
+    }
+  })
+  .catch((err) => {
+    console.warn("⚠️  Cache başlatılamadı, normal modda devam ediliyor:", err.message);
+  });
+
 // ---- Server ----
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Sunucu ${PORT} portunda çalışıyor`));
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  console.log("SIGTERM sinyali alındı, sunucu kapatılıyor...");
+  await cacheService.disconnect();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("SIGINT sinyali alındı, sunucu kapatılıyor...");
+  await cacheService.disconnect();
+  process.exit(0);
+});

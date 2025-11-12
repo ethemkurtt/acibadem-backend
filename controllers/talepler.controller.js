@@ -13,6 +13,10 @@ const PersonelDetay = require("../models/talepler/personelTalepDetay.model");
 const MisafirDetay = require("../models/talepler/misafirTalepDetay.model");
 const DigerDetay = require("../models/talepler/digerTalepDetay.model");
 
+// ⚡ Optimizasyon araçları
+const dataLoader = require("../utils/dataLoader");
+const taleplerOptimizer = require("../utils/taleplerOptimizer");
+
 // ------------------ Güvenli preload (farklı klasör/adlarla kayıtlı olabilir) ------------------
 const safeRequire = (p) => {
   try {
@@ -153,18 +157,9 @@ exports.aracTalep = async (req, res) => {
       q.lokasyon = { $in: userLokasyonIds };
     }
 
-    // ⚠️ Filtreleme/sıralama route tarihlerine göre yapılacağı için,
-    // önce tüm adayları çekiyoruz; sonra bellekte filtreleyip sıralayacağız.
+    // ⚡ OPTIMIZE: Populate'siz çek, sonra batch populate yap
     const rawItems = await Talepler.find(q)
-      .sort({ createdAt: -1 }) // geçici; gerçek sıralamayı aşağıda yapacağız
-      .populate([
-        { path: "lokasyon" },
-        { path: "sofor", select: userSelectExclude },
-        { path: "arac" },
-        { path: "talepEdenId", select: userSelectExclude },
-        { path: "atamaYapanId", select: userSelectExclude },
-        { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-      ])
+      .sort({ createdAt: -1 })
       .lean();
 
     // ---- Detayları toplu halde çek (N+1 yerine batched) ----
@@ -177,12 +172,12 @@ exports.aracTalep = async (req, res) => {
       if (idsByType[rt]) idsByType[rt].push(id);
     }
 
+    // ⚡ OPTIMIZE: Detay populate - companions, routes, notificationPerson'ı populate et
     const POPULATE_HASTA_MISAFIR = [
       { path: "companions" },
       { path: "routes" },
       { path: "notificationPerson" },
-      { path: "bolge" },
-      { path: "country" },
+      // bolge ve country'yi batch ile çekeceğiz
     ];
     const POPULATE_PERSONEL = [{ path: "companions" }, { path: "routes" }];
 
@@ -212,6 +207,19 @@ exports.aracTalep = async (req, res) => {
         : [],
     ]);
 
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    const allDetayWithBolge = [...hastaDetayList, ...misafirDetayList];
+    if (allDetayWithBolge.length > 0) {
+      const populatedDetay = await taleplerOptimizer.populateDetayBatch(allDetayWithBolge);
+      let idx = 0;
+      for (let i = 0; i < hastaDetayList.length; i++) {
+        hastaDetayList[i] = populatedDetay[idx++];
+      }
+      for (let i = 0; i < misafirDetayList.length; i++) {
+        misafirDetayList[i] = populatedDetay[idx++];
+      }
+    }
+
     const detayMap = new Map();
     for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
@@ -231,11 +239,28 @@ exports.aracTalep = async (req, res) => {
       return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     })();
 
-    // routes içinden başlangıç(ilk pickup) ve bitiş(son drop) hesapla + kordinat backfill
+    // ⚡ OPTIMIZE: Routes içindeki koordinatları batch olarak ekle
     const needsCoord = new Set(["hasta", "misafir", "personel"]);
+    
+    for (const [talepId, detay] of detayMap.entries()) {
+      if (!detay || !detay.routes || detay.routes.length === 0) continue;
+      
+      const talep = rawItems.find((t) => String(t._id) === talepId);
+      if (!talep) continue;
+
+      const rt = (talep.requestType || "").toLowerCase();
+      if (needsCoord.has(rt)) {
+        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
+      }
+    }
+
+    // ⚡ OPTIMIZE: Talepler için batch populate
+    const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+
+    // routes içinden başlangıç(ilk pickup) ve bitiş(son drop) hesapla
     const computed = []; // { item, detay, start, end }
 
-    for (const t of rawItems) {
+    for (const t of populatedItems) {
       const rt = (t.requestType || "").toLowerCase();
       const d = detayMap.get(String(t._id)) || null;
 
@@ -244,55 +269,39 @@ exports.aracTalep = async (req, res) => {
       let end = null;
 
       if (d && Array.isArray(d.routes) && d.routes.length) {
-        // koordinat & name backfill ve min/max tarih çıkarımı
-        const processedRoutes = await Promise.all(
-          d.routes.map(async (r) => {
-            const base = r?.toObject ? r.toObject() : r;
-            const out = { ...base };
+        // min/max tarih çıkarımı
+        for (const r of d.routes) {
+          const base = r?.toObject ? r.toObject() : r;
 
-            // backfill (opsiyonel)
-            if (needsCoord.has(rt)) {
-              out.pickup = await addKordinatFlexible(base.pickup);
-              out.drop = await addKordinatFlexible(base.drop);
-            }
+          // tarih çıkarımı
+          const pickupArr = toArray(base.pickup);
+          const dropArr = toArray(base.drop);
 
-            // tarih çıkarımı
-            const pickupArr = toArray(out.pickup);
-            const dropArr = toArray(out.drop);
+          const pickupDates = pickupArr
+            .map((p) => normDate(p?.date))
+            .filter(Boolean);
+          const dropDates = dropArr
+            .map((p) => normDate(p?.date))
+            .filter(Boolean);
 
-            const pickupDates = pickupArr
-              .map((p) => normDate(p?.date))
-              .filter(Boolean);
-            const dropDates = dropArr
-              .map((p) => normDate(p?.date))
-              .filter(Boolean);
+          const localMinPickup =
+            pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+          const localMaxDrop = dropDates.length
+            ? new Date(Math.max(...dropDates))
+            : pickupDates.length
+            ? new Date(Math.max(...pickupDates))
+            : null;
 
-            const localMinPickup =
-              pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
-            const localMaxDrop = dropDates.length
-              ? new Date(Math.max(...dropDates))
-              : pickupDates.length
-              ? new Date(Math.max(...pickupDates))
-              : null;
-
-            if (localMinPickup && (!start || localMinPickup < start)) {
-              start = localMinPickup;
-            }
-            if (localMaxDrop && (!end || localMaxDrop > end)) {
-              end = localMaxDrop;
-            }
-
-            return out;
-          })
-        );
-
-        // detay.routes'i geri yaz
-        if (processedRoutes.length) {
-          d.routes = processedRoutes;
+          if (localMinPickup && (!start || localMinPickup < start)) {
+            start = localMinPickup;
+          }
+          if (localMaxDrop && (!end || localMaxDrop > end)) {
+            end = localMaxDrop;
+          }
         }
       }
 
-      // Yedek: routes yoksa transferTarihi’ni dene
+      // Yedek: routes yoksa transferTarihi'ni dene
       if (!start) start = normDate(t.transferTarihi);
       if (!end) end = normDate(t.transferTarihi);
 
@@ -397,22 +406,18 @@ exports.list = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam sayımı
-    const [items, total] = await Promise.all([
+    // ⚡ OPTIMIZE: Populate'siz çek, sonra batch populate
+    const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ]),
+        .lean(),
       Talepler.countDocuments(q),
     ]);
+
+    // ⚡ OPTIMIZE: Batch populate
+    const items = await taleplerOptimizer.populateTaleplerBatch(rawItems);
 
     // Yanıt
     res.json({
@@ -434,32 +439,27 @@ exports.getById = async (req, res) => {
     const { id } = req.params;
     if (!isId(id)) return res.status(400).json({ message: "Geçersiz id" });
 
-    const doc = await Talepler.findById(id).populate([
-      { path: "lokasyon" },
-      { path: "sofor", select: userSelectExclude },
-      { path: "arac" },
-      { path: "talepEdenId", select: userSelectExclude },
-      { path: "atamaYapanId", select: userSelectExclude },
-      { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-    ]);
+    // ⚡ OPTIMIZE: Populate'siz çek
+    const doc = await Talepler.findById(id).lean();
 
     if (!doc) return res.status(404).json({ message: "Kayıt bulunamadı" });
 
-    // --- SADECE ISTENEN IF BLOĞU ---
-    // (addKordinatToRoutes, fetchKordinat/getModel yardımcılarını yukarıda eklemiştin)
-    let result = doc.toObject();
-    if (doc.requestType === "hasta" || doc.requestType === "misafir") {
+    // ⚡ OPTIMIZE: Batch populate
+    const [result] = await taleplerOptimizer.populateTaleplerBatch([doc]);
+
+    // Detay kontrolü (hasta/misafir için routes)
+    if (result.requestType === "hasta" || result.requestType === "misafir") {
       const DetayModel =
-        doc.requestType === "hasta" ? HastaDetay : MisafirDetay;
+        result.requestType === "hasta" ? HastaDetay : MisafirDetay;
       const d = await DetayModel.findOne({ talep_id: id })
         .populate([{ path: "routes" }])
         .lean();
 
       if (d?.routes?.length) {
-        result.routes = await addKordinatToRoutes(d.routes); // pickup/drop içine sadece kordinat string’i ekler
+        // ⚡ OPTIMIZE: Batch koordinat ekleme
+        result.routes = await taleplerOptimizer.addKordinatToRoutesBatch(d.routes);
       }
     }
-    // --- /IF ---
 
     res.json(result);
   } catch (err) {
@@ -533,19 +533,18 @@ exports.assignAracSofor = async (req, res) => {
     // Diğer durumlarda atamaDurumu'na dokunma (mevcut değer korunur)
     // ────────────────────────────────────────────────────────────────────
 
+    // ⚡ OPTIMIZE: Populate'siz güncelle
     const item = await Talepler.findByIdAndUpdate(id, update, {
       new: true,
       runValidators: true,
-    })
-      .populate([{ path: "lokasyon" }, { path: "arac" }])
-      .populate({ path: "sofor", select: userSelectExclude })
-      .populate({ path: "talepEdenId", select: userSelectExclude })
-      .populate({ path: "atamaYapanId", select: userSelectExclude })
-      .populate({ path: "lokasyonSonDegistirenId", select: userSelectExclude });
+    }).lean();
 
     if (!item) return res.status(404).json({ error: "Talep bulunamadı" });
 
-    return res.json({ message: "Güncelleme başarılı", item });
+    // ⚡ OPTIMIZE: Batch populate
+    const [populatedItem] = await taleplerOptimizer.populateTaleplerBatch([item]);
+
+    return res.json({ message: "Güncelleme başarılı", item: populatedItem });
   } catch (err) {
     console.error("❌ assignAracSofor hata:", err);
     return res.status(500).json({ error: "Atama yapılamadı", details: err.message });
@@ -634,20 +633,14 @@ exports.getFullById = async (req, res) => {
     };
     // ---------------------------------------
 
-    // 1) Ana talep — okunabilir (populate)
-    const talep = await Talepler.findById(id)
-      .populate([
-        { path: "lokasyon" },
-        { path: "arac" },
-        { path: "sofor", select: userSelectExclude },
-        { path: "talepEdenId", select: userSelectExclude },
-        { path: "atamaYapanId", select: userSelectExclude },
-        { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-      ])
-      .lean();
+    // ⚡ OPTIMIZE: Populate'siz çek
+    const rawTalep = await Talepler.findById(id).lean();
 
-    if (!talep)
+    if (!rawTalep)
       return res.status(404).json({ ok: false, message: "Talep bulunamadı" });
+
+    // ⚡ OPTIMIZE: Batch populate
+    const [talep] = await taleplerOptimizer.populateTaleplerBatch([rawTalep]);
 
     let detay = null;
 
@@ -658,8 +651,6 @@ exports.getFullById = async (req, res) => {
           { path: "companions" },
           { path: "routes" },
           { path: "notificationPerson" },
-          { path: "bolge" },
-          { path: "country" },
         ])
         .lean();
     } else if (talep.requestType === "personel") {
@@ -672,8 +663,6 @@ exports.getFullById = async (req, res) => {
           { path: "companions" },
           { path: "routes" },
           { path: "notificationPerson" },
-          { path: "bolge" },
-          { path: "country" },
         ])
         .lean();
     } else if (talep.requestType === "diger") {
@@ -682,22 +671,19 @@ exports.getFullById = async (req, res) => {
       detay = null;
     }
 
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    if (detay && (talep.requestType === "hasta" || talep.requestType === "misafir")) {
+      const [populatedDetay] = await taleplerOptimizer.populateDetayBatch([detay]);
+      detay = populatedDetay;
+    }
+
     // 3) hasta/misafir için: pickup/drop İÇİNE kordinat ekle (pickup/drop dizi olursa her elemana eklenir)
     if (
       (talep.requestType === "hasta" || talep.requestType === "misafir") &&
       detay?.routes?.length
     ) {
-      detay.routes = await Promise.all(
-        detay.routes.map(async (r) => {
-          const base = r?.toObject ? r.toObject() : r;
-          const out = { ...base };
-
-          out.pickup = await addKordinatFlexible(base.pickup);
-          out.drop = await addKordinatFlexible(base.drop);
-
-          return out;
-        })
-      );
+      // ⚡ OPTIMIZE: Batch koordinat ekleme
+      detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
     }
 
     // 4) DÖNÜŞ
@@ -768,20 +754,12 @@ exports.aracIsEmri = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam sayım
+    // ⚡ OPTIMIZE: Populate'siz çek
     const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ])
         .lean(),
       Talepler.countDocuments(q),
     ]);
@@ -799,8 +777,6 @@ exports.aracIsEmri = async (req, res) => {
       { path: "companions" },
       { path: "routes" },
       { path: "notificationPerson" },
-      { path: "bolge" },
-      { path: "country" },
     ];
     const POPULATE_PERSONEL = [{ path: "companions" }];
 
@@ -830,6 +806,19 @@ exports.aracIsEmri = async (req, res) => {
         : [],
     ]);
 
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    const allDetayWithBolge = [...hastaDetayList, ...misafirDetayList];
+    if (allDetayWithBolge.length > 0) {
+      const populatedDetay = await taleplerOptimizer.populateDetayBatch(allDetayWithBolge);
+      let idx = 0;
+      for (let i = 0; i < hastaDetayList.length; i++) {
+        hastaDetayList[i] = populatedDetay[idx++];
+      }
+      for (let i = 0; i < misafirDetayList.length; i++) {
+        misafirDetayList[i] = populatedDetay[idx++];
+      }
+    }
+
     // Map oluştur
     const detayMap = new Map();
     for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
@@ -837,28 +826,25 @@ exports.aracIsEmri = async (req, res) => {
     for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
-    // Hasta/Misafir için kordinat + locationName
+    // ⚡ OPTIMIZE: Hasta/Misafir için koordinatları batch olarak ekle
     const needsCoord = new Set(["hasta", "misafir"]);
-    for (const t of rawItems) {
-      const rt = (t.requestType || "").toLowerCase();
-      const d = detayMap.get(String(t._id));
-      if (!d) continue;
+    for (const [talepId, detay] of detayMap.entries()) {
+      if (!detay || !detay.routes || detay.routes.length === 0) continue;
+      
+      const talep = rawItems.find((t) => String(t._id) === talepId);
+      if (!talep) continue;
 
-      if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
-        d.routes = await Promise.all(
-          d.routes.map(async (r) => {
-            const base = r?.toObject ? r.toObject() : r;
-            const out = { ...base };
-            out.pickup = await addKordinatFlexible(base.pickup);
-            out.drop = await addKordinatFlexible(base.drop);
-            return out;
-          })
-        );
+      const rt = (talep.requestType || "").toLowerCase();
+      if (needsCoord.has(rt)) {
+        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
       }
     }
 
+    // ⚡ OPTIMIZE: Talepler için batch populate
+    const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+
     // Nihai dönüş (detaylı JSON)
-    const items = rawItems.map((t) => {
+    const items = populatedItems.map((t) => {
       const detay = detayMap.get(String(t._id)) || null;
       let nereden = "-",
         nereye = "-",
@@ -918,22 +904,18 @@ exports.taleplerim = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam
-    const [items, total] = await Promise.all([
+    // ⚡ OPTIMIZE: Populate'siz çek, sonra batch populate
+    const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ]),
+        .lean(),
       Talepler.countDocuments(q),
     ]);
+
+    // ⚡ OPTIMIZE: Batch populate
+    const items = await taleplerOptimizer.populateTaleplerBatch(rawItems);
 
     // Yanıt şeması aynı
     return res.json({
@@ -976,22 +958,18 @@ exports.islerim = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam
-    const [items, total] = await Promise.all([
+    // ⚡ OPTIMIZE: Populate'siz çek, sonra batch populate
+    const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ]),
+        .lean(),
       Talepler.countDocuments(q),
     ]);
+
+    // ⚡ OPTIMIZE: Batch populate
+    const items = await taleplerOptimizer.populateTaleplerBatch(rawItems);
 
     // Yanıt şeması
     return res.json({
@@ -1062,20 +1040,12 @@ exports.isAtamalarim = async (req, res) => {
     // Sayfalama
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sorgu + toplam sayım
+    // ⚡ OPTIMIZE: Populate'siz çek
     const [rawItems, total] = await Promise.all([
       Talepler.find(q)
         .sort({ transferTarihi: 1, createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate([
-          { path: "lokasyon" },
-          { path: "sofor", select: userSelectExclude },
-          { path: "arac" },
-          { path: "talepEdenId", select: userSelectExclude },
-          { path: "atamaYapanId", select: userSelectExclude },
-          { path: "lokasyonSonDegistirenId", select: userSelectExclude },
-        ])
         .lean(),
       Talepler.countDocuments(q),
     ]);
@@ -1094,8 +1064,6 @@ exports.isAtamalarim = async (req, res) => {
       { path: "companions" },
       { path: "routes" },
       { path: "notificationPerson" },
-      { path: "bolge" },
-      { path: "country" },
     ];
     const POPULATE_PERSONEL = [{ path: "companions" }];
 
@@ -1125,6 +1093,19 @@ exports.isAtamalarim = async (req, res) => {
         : [],
     ]);
 
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    const allDetayWithBolge = [...hastaDetayList, ...misafirDetayList];
+    if (allDetayWithBolge.length > 0) {
+      const populatedDetay = await taleplerOptimizer.populateDetayBatch(allDetayWithBolge);
+      let idx = 0;
+      for (let i = 0; i < hastaDetayList.length; i++) {
+        hastaDetayList[i] = populatedDetay[idx++];
+      }
+      for (let i = 0; i < misafirDetayList.length; i++) {
+        misafirDetayList[i] = populatedDetay[idx++];
+      }
+    }
+
     // talep_id -> detay map
     const detayMap = new Map();
     for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
@@ -1132,28 +1113,25 @@ exports.isAtamalarim = async (req, res) => {
     for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
-    // Hasta/Misafir için routes.pickup/drop içine kordinat + locationName backfill
+    // ⚡ OPTIMIZE: Hasta/Misafir için koordinatları batch olarak ekle
     const needsCoord = new Set(["hasta", "misafir"]);
-    for (const t of rawItems) {
-      const rt = (t.requestType || "").toLowerCase();
-      const d = detayMap.get(String(t._id));
-      if (!d) continue;
+    for (const [talepId, detay] of detayMap.entries()) {
+      if (!detay || !detay.routes || detay.routes.length === 0) continue;
+      
+      const talep = rawItems.find((t) => String(t._id) === talepId);
+      if (!talep) continue;
 
-      if (needsCoord.has(rt) && Array.isArray(d.routes) && d.routes.length) {
-        d.routes = await Promise.all(
-          d.routes.map(async (r) => {
-            const base = r?.toObject ? r.toObject() : r;
-            const out = { ...base };
-            out.pickup = await addKordinatFlexible(base.pickup);
-            out.drop = await addKordinatFlexible(base.drop);
-            return out;
-          })
-        );
+      const rt = (talep.requestType || "").toLowerCase();
+      if (needsCoord.has(rt)) {
+        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
       }
     }
 
+    // ⚡ OPTIMIZE: Talepler için batch populate
+    const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+
     // Son liste: item + detay
-    const items = rawItems.map((t) => {
+    const items = populatedItems.map((t) => {
       const d = detayMap.get(String(t._id)) || null;
       return { ...t, detay: d };
     });

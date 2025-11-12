@@ -12,4 +12,8 @@ const havalimaniSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ⚡ OPTIMIZE: İndeksler
+havalimaniSchema.index({ adi: 1 });
+havalimaniSchema.index({ il_kodu: 1 });
+
 module.exports = mongoose.model("Havalimani", havalimaniSchema);

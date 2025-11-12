@@ -8,6 +8,10 @@ const Companions = require("../models/hastaTalepModels/companions.model");
 const Routes = require("../models/hastaTalepModels/routes.model");
 const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 
+// ⚡ Optimizasyon araçları
+const dataLoader = require("../utils/dataLoader");
+const taleplerOptimizer = require("../utils/taleplerOptimizer");
+
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const pick = (obj, keys) =>
   keys.reduce((acc, k) => {
@@ -143,22 +147,13 @@ async function ensureNotificationIdForUpdate(obj, talepId, session) {
   return undefined;
 }
 
-/* ------------------------ Populate şemaları ------------------------ */
-const TALEP_POPULATE = [
-  { path: "lokasyon" },
-  { path: "arac" },
-  { path: "sofor", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
-  { path: "talepEdenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
-  { path: "atamaYapanId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
-  { path: "lokasyonSonDegistirenId", select: "-password -resetPasswordToken -resetPasswordExpires -__v" },
-];
-
-const DETAY_POPULATE = [
+/* ------------------------ Populate şemaları (eski - artık kullanılmıyor) ------------------------ */
+// ⚡ OPTIMIZE: Populate işlemleri artık cache ve batch ile yapılıyor
+const DETAY_POPULATE_REFS = [
   { path: "companions" },
   { path: "routes" },
   { path: "notificationPerson" },
-  { path: "bolge" },
-  { path: "country" },
+  // bolge ve country'yi batch ile çekeceğiz
 ];
 
 /* ------------------------ 1) Talepler + HastaDetay birlikte oluştur ------------------------ */
@@ -214,13 +209,14 @@ exports.createCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // Dönüşte populate
-    const populatedTalep = await Talepler.findById(talepDoc._id)
-      .populate(TALEP_POPULATE)
-      .lean();
-    const populatedDetay = await HastaDetay.findById(detayDoc._id)
-      .populate(DETAY_POPULATE)
-      .lean();
+    // ⚡ OPTIMIZE: Dönüşte batch populate
+    const [rawTalep, rawDetay] = await Promise.all([
+      Talepler.findById(talepDoc._id).lean(),
+      HastaDetay.findById(detayDoc._id).populate(DETAY_POPULATE_REFS).lean(),
+    ]);
+
+    const [populatedTalep] = await taleplerOptimizer.populateTaleplerBatch([rawTalep]);
+    const [populatedDetay] = await taleplerOptimizer.populateDetayBatch([rawDetay]);
 
     return res.status(201).json({
       message: "Hasta talep ve detay başarıyla oluşturuldu",
@@ -316,14 +312,16 @@ exports.updateCombined = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // Dönüşte populate
-    const populatedTalep = await Talepler.findById(talepId)
-      .populate(TALEP_POPULATE)
-      .lean();
+    // ⚡ OPTIMIZE: Dönüşte batch populate
+    const [rawTalep, rawDetay] = await Promise.all([
+      Talepler.findById(talepId).lean(),
+      HastaDetay.findById(detayDoc._id).populate(DETAY_POPULATE_REFS).lean(),
+    ]);
 
-    const populatedDetay = await HastaDetay.findById(detayDoc._id)
-      .populate(DETAY_POPULATE)
-      .lean();
+    const [populatedTalep] = await taleplerOptimizer.populateTaleplerBatch([rawTalep]);
+    const [populatedDetay] = rawDetay
+      ? await taleplerOptimizer.populateDetayBatch([rawDetay])
+      : [null];
 
     return res.json({
       message: "Hasta talep ve detay başarıyla güncellendi",
