@@ -239,8 +239,10 @@ exports.aracTalep = async (req, res) => {
       return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     })();
 
-    // ⚡ OPTIMIZE: Routes içindeki koordinatları batch olarak ekle
+    // ⚡ OPTIMIZE: Tüm routes'ları topla ve tek seferde batch koordinat ekle
     const needsCoord = new Set(["hasta", "misafir", "personel"]);
+    const routesToProcess = [];
+    const routeMetadata = []; // { talepId, detayRef, routeCount }
     
     for (const [talepId, detay] of detayMap.entries()) {
       if (!detay || !detay.routes || detay.routes.length === 0) continue;
@@ -250,7 +252,20 @@ exports.aracTalep = async (req, res) => {
 
       const rt = (talep.requestType || "").toLowerCase();
       if (needsCoord.has(rt)) {
-        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
+        routesToProcess.push(...detay.routes);
+        routeMetadata.push({ talepId, detay, routeCount: detay.routes.length });
+      }
+    }
+
+    // Tüm routes'ları tek seferde işle (N yerine 1 batch)
+    if (routesToProcess.length > 0) {
+      const processedRoutes = await taleplerOptimizer.addKordinatToRoutesBatch(routesToProcess);
+      
+      // İşlenmiş routes'ları geri yerleştir
+      let routeIdx = 0;
+      for (const meta of routeMetadata) {
+        meta.detay.routes = processedRoutes.slice(routeIdx, routeIdx + meta.routeCount);
+        routeIdx += meta.routeCount;
       }
     }
 
@@ -826,8 +841,11 @@ exports.aracIsEmri = async (req, res) => {
     for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
-    // ⚡ OPTIMIZE: Hasta/Misafir için koordinatları batch olarak ekle
+    // ⚡ OPTIMIZE: Tüm routes'ları topla ve tek seferde batch koordinat ekle
     const needsCoord = new Set(["hasta", "misafir"]);
+    const routesToProcess = [];
+    const routeMetadata = []; // { talepId, detayRef, routeCount }
+    
     for (const [talepId, detay] of detayMap.entries()) {
       if (!detay || !detay.routes || detay.routes.length === 0) continue;
       
@@ -836,7 +854,20 @@ exports.aracIsEmri = async (req, res) => {
 
       const rt = (talep.requestType || "").toLowerCase();
       if (needsCoord.has(rt)) {
-        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
+        routesToProcess.push(...detay.routes);
+        routeMetadata.push({ talepId, detay, routeCount: detay.routes.length });
+      }
+    }
+
+    // Tüm routes'ları tek seferde işle (N yerine 1 batch)
+    if (routesToProcess.length > 0) {
+      const processedRoutes = await taleplerOptimizer.addKordinatToRoutesBatch(routesToProcess);
+      
+      // İşlenmiş routes'ları geri yerleştir
+      let routeIdx = 0;
+      for (const meta of routeMetadata) {
+        meta.detay.routes = processedRoutes.slice(routeIdx, routeIdx + meta.routeCount);
+        routeIdx += meta.routeCount;
       }
     }
 
@@ -1113,8 +1144,11 @@ exports.isAtamalarim = async (req, res) => {
     for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
     for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
 
-    // ⚡ OPTIMIZE: Hasta/Misafir için koordinatları batch olarak ekle
+    // ⚡ OPTIMIZE: Tüm routes'ları topla ve tek seferde batch koordinat ekle
     const needsCoord = new Set(["hasta", "misafir"]);
+    const routesToProcess = [];
+    const routeMetadata = []; // { talepId, detayRef, routeCount }
+    
     for (const [talepId, detay] of detayMap.entries()) {
       if (!detay || !detay.routes || detay.routes.length === 0) continue;
       
@@ -1123,7 +1157,20 @@ exports.isAtamalarim = async (req, res) => {
 
       const rt = (talep.requestType || "").toLowerCase();
       if (needsCoord.has(rt)) {
-        detay.routes = await taleplerOptimizer.addKordinatToRoutesBatch(detay.routes);
+        routesToProcess.push(...detay.routes);
+        routeMetadata.push({ talepId, detay, routeCount: detay.routes.length });
+      }
+    }
+
+    // Tüm routes'ları tek seferde işle (N yerine 1 batch)
+    if (routesToProcess.length > 0) {
+      const processedRoutes = await taleplerOptimizer.addKordinatToRoutesBatch(routesToProcess);
+      
+      // İşlenmiş routes'ları geri yerleştir
+      let routeIdx = 0;
+      for (const meta of routeMetadata) {
+        meta.detay.routes = processedRoutes.slice(routeIdx, routeIdx + meta.routeCount);
+        routeIdx += meta.routeCount;
       }
     }
 
@@ -1136,7 +1183,7 @@ exports.isAtamalarim = async (req, res) => {
       return { ...t, detay: d };
     });
 
-    // Yanıt (şema aynı, sadece her item’da `detay` var)
+    // Yanıt (şema aynı, sadece her item'da `detay` var)
     res.json({
       page: Number(page),
       limit: Number(limit),
