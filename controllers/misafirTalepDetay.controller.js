@@ -8,6 +8,9 @@ const Companions = require("../models/hastaTalepModels/companions.model");
 const Routes = require("../models/hastaTalepModels/routes.model");
 const NotificationPerson = require("../models/hastaTalepModels/notificationPerson.model");
 
+// ⚡ Optimizasyon araçları
+const taleplerOptimizer = require("../utils/taleplerOptimizer");
+
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const pick = (obj, keys) =>
   keys.reduce((acc, k) => {

@@ -7,6 +7,9 @@ const Otel = require("../models/otel/otel.model"); // Gerekirse: require("../mod
 const XLSX = require("xlsx");
 const path = require("path");
 
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 /* ----------------------------- Yardımcılar ----------------------------- */
 
 const toIntOrUndefined = (v) => {
@@ -115,6 +118,9 @@ exports.createOtel = async (req, res) => {
     // Oluşturduktan sonra populate edip dönelim
     const populated = await Otel.findById(otel._id).populate(LOKASYON_POPULATE).lean();
 
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateOtel(otel._id).catch(() => {});
+
     return res.status(201).json({
       message: "Otel başarıyla oluşturuldu",
       data: populated,
@@ -196,6 +202,9 @@ exports.updateOtel = async (req, res) => {
       });
     }
 
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateOtel(req.params.id).catch(() => {});
+
     return res.json({
       message: "Otel başarıyla güncellendi",
       data: updated,
@@ -221,6 +230,10 @@ exports.deleteOtel = async (req, res) => {
         data: null,
       });
     }
+
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidateOtel(req.params.id).catch(() => {});
+
     return res.json({
       message: "Otel başarıyla silindi",
       data: deleted,

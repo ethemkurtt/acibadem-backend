@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const Talepler = require("../models/talepler/talepler.model");
 const DigerDetay = require("../models/talepler/digerTalepDetay.model");
 
+// ⚡ Optimizasyon araçları
+const taleplerOptimizer = require("../utils/taleplerOptimizer");
+
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 const toNullIfEmpty = (v) =>
   typeof v === "string" && v.trim() === "" ? null : v;
