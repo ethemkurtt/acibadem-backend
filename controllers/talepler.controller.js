@@ -758,12 +758,7 @@ exports.aracIsEmri = async (req, res) => {
     if (sofor && isId(sofor)) q.sofor = sofor;
     if (isDurumu) q.isDurumu = isDurumu; // ✅ İş durumu filtresi
 
-    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
-    if (startDate || endDate) {
-      q.transferTarihi = {};
-      if (startDate) q.transferTarihi.$gte = new Date(startDate);
-      if (endDate) q.transferTarihi.$lte = new Date(endDate);
-    }
+    // ⚠️ Tarih filtresini routes'tan hesapladıktan sonra yapacağız, transferTarihi ile değil!
 
     // Lokasyon filtresi
     if (lokasyon && isId(lokasyon)) {
@@ -951,8 +946,22 @@ exports.aracIsEmri = async (req, res) => {
       computed.push({ item: t, detay: d, start, end, nereden, nereye, kisiSayisi, tarihSaat });
     }
 
-    // ✅ Filtre: Bitiş tarihi < bugün 00:00 ise gösterme (geçmiş gelmeyecek)
-    const filtered = computed.filter(({ end }) => {
+    // ✅ Filtre 1: Tarih aralığı kontrolü (overlap - çakışma kontrolü)
+    let dateFiltered = computed;
+    if (startDate || endDate) {
+      const filterStart = startDate ? new Date(startDate) : new Date(0); // Başlangıç yoksa çok eski tarih
+      const filterEnd = endDate ? new Date(endDate) : new Date(9999, 11, 31); // Bitiş yoksa çok ileri tarih
+      
+      dateFiltered = computed.filter(({ start, end }) => {
+        if (!start || !end) return false;
+        // Çakışma kontrolü: İşin tarihleri filtrenin tarih aralığına denk geliyor mu?
+        // jobStart <= filterEnd && jobEnd >= filterStart
+        return start <= filterEnd && end >= filterStart;
+      });
+    }
+
+    // ✅ Filtre 2: Bitiş tarihi < bugün 00:00 ise gösterme (geçmiş gelmeyecek)
+    const filtered = dateFiltered.filter(({ end }) => {
       if (!end) return false; // tarih yoksa listeleme
       return end >= IST_TODAY_START; // ✅ Bugün veya gelecekteki işleri göster
     });
@@ -974,9 +983,11 @@ exports.aracIsEmri = async (req, res) => {
     const paged = filtered.slice(skip, skip + Number(limit));
 
     // Nihai dönüş
-    const items = paged.map(({ item, detay, nereden, nereye, kisiSayisi, tarihSaat }) => ({
+    const items = paged.map(({ item, detay, start, end, nereden, nereye, kisiSayisi, tarihSaat }) => ({
       ...item,
       detay,
+      baslangicTarihi: start, // ✅ Routes'tan hesaplanan başlangıç
+      bitisTarihi: end,       // ✅ Routes'tan hesaplanan bitiş
       nereden,
       nereye,
       kisiSayisi,
@@ -1019,12 +1030,7 @@ exports.taleplerim = async (req, res) => {
     if (isDurumu) q.isDurumu = isDurumu;
     if (lokasyon && isId(lokasyon)) q.lokasyon = new ObjectId(lokasyon);
 
-    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
-    if (startDate || endDate) {
-      q.transferTarihi = {};
-      if (startDate) q.transferTarihi.$gte = new Date(startDate);
-      if (endDate) q.transferTarihi.$lte = new Date(endDate);
-    }
+    // ⚠️ Tarih filtresini routes'tan hesapladıktan sonra yapacağız!
 
     // ⚡ OPTIMIZE: Populate'siz çek (sayfalama daha sonra)
     const rawItems = await Talepler.find(q)
@@ -1174,8 +1180,20 @@ exports.taleplerim = async (req, res) => {
       computed.push({ item: t, detay: d, start, end });
     }
 
-    // ✅ Filtre: Geçmiş gelmeyecek
-    const filtered = computed.filter(({ end }) => {
+    // ✅ Filtre 1: Tarih aralığı kontrolü (overlap)
+    let dateFiltered = computed;
+    if (startDate || endDate) {
+      const filterStart = startDate ? new Date(startDate) : new Date(0);
+      const filterEnd = endDate ? new Date(endDate) : new Date(9999, 11, 31);
+      
+      dateFiltered = computed.filter(({ start, end }) => {
+        if (!start || !end) return false;
+        return start <= filterEnd && end >= filterStart;
+      });
+    }
+
+    // ✅ Filtre 2: Geçmiş gelmeyecek
+    const filtered = dateFiltered.filter(({ end }) => {
       if (!end) return false;
       return end >= IST_TODAY_START;
     });
@@ -1195,7 +1213,12 @@ exports.taleplerim = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const paged = filtered.slice(skip, skip + Number(limit));
 
-    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+    const items = paged.map(({ item, detay, start, end }) => ({ 
+      ...item, 
+      detay,
+      baslangicTarihi: start, // ✅ Routes'tan hesaplanan başlangıç
+      bitisTarihi: end        // ✅ Routes'tan hesaplanan bitiş
+    }));
 
     return res.json({
       page: Number(page),
@@ -1395,8 +1418,20 @@ exports.islerim = async (req, res) => {
       computed.push({ item: t, detay: d, start, end });
     }
 
-    // ✅ Filtre: Geçmiş gelmeyecek
-    const filtered = computed.filter(({ end }) => {
+    // ✅ Filtre 1: Tarih aralığı kontrolü (overlap)
+    let dateFiltered = computed;
+    if (startDate || endDate) {
+      const filterStart = startDate ? new Date(startDate) : new Date(0);
+      const filterEnd = endDate ? new Date(endDate) : new Date(9999, 11, 31);
+      
+      dateFiltered = computed.filter(({ start, end }) => {
+        if (!start || !end) return false;
+        return start <= filterEnd && end >= filterStart;
+      });
+    }
+
+    // ✅ Filtre 2: Geçmiş gelmeyecek
+    const filtered = dateFiltered.filter(({ end }) => {
       if (!end) return false;
       return end >= IST_TODAY_START;
     });
@@ -1416,7 +1451,12 @@ exports.islerim = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const paged = filtered.slice(skip, skip + Number(limit));
 
-    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+    const items = paged.map(({ item, detay, start, end }) => ({ 
+      ...item, 
+      detay,
+      baslangicTarihi: start, // ✅ Routes'tan hesaplanan başlangıç
+      bitisTarihi: end        // ✅ Routes'tan hesaplanan bitiş
+    }));
 
     // Yanıt şeması
     return res.json({
@@ -1456,12 +1496,7 @@ exports.gecmisTaleplerim = async (req, res) => {
     if (isDurumu) q.isDurumu = isDurumu;
     if (lokasyon && isId(lokasyon)) q.lokasyon = new ObjectId(lokasyon);
 
-    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
-    if (startDate || endDate) {
-      q.transferTarihi = {};
-      if (startDate) q.transferTarihi.$gte = new Date(startDate);
-      if (endDate) q.transferTarihi.$lte = new Date(endDate);
-    }
+    // ⚠️ Tarih filtresini routes'tan hesapladıktan sonra yapacağız!
 
     // ⚡ OPTIMIZE: Populate'siz çek (sayfalama daha sonra)
     const rawItems = await Talepler.find(q)
@@ -1611,8 +1646,20 @@ exports.gecmisTaleplerim = async (req, res) => {
       computed.push({ item: t, detay: d, start, end });
     }
 
-    // ✅ Filtre: SADECE GEÇMİŞ (bitiş tarihi bugünden önce)
-    const filtered = computed.filter(({ end }) => {
+    // ✅ Filtre 1: Tarih aralığı kontrolü (overlap)
+    let dateFiltered = computed;
+    if (startDate || endDate) {
+      const filterStart = startDate ? new Date(startDate) : new Date(0);
+      const filterEnd = endDate ? new Date(endDate) : new Date(9999, 11, 31);
+      
+      dateFiltered = computed.filter(({ start, end }) => {
+        if (!start || !end) return false;
+        return start <= filterEnd && end >= filterStart;
+      });
+    }
+
+    // ✅ Filtre 2: SADECE GEÇMİŞ (bitiş tarihi bugünden önce)
+    const filtered = dateFiltered.filter(({ end }) => {
       if (!end) return false;
       return end < IST_TODAY_START; // ✅ Dün ve öncesi (geçmiş işler)
     });
@@ -1632,7 +1679,12 @@ exports.gecmisTaleplerim = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const paged = filtered.slice(skip, skip + Number(limit));
 
-    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+    const items = paged.map(({ item, detay, start, end }) => ({ 
+      ...item, 
+      detay,
+      baslangicTarihi: start, // ✅ Routes'tan hesaplanan başlangıç
+      bitisTarihi: end        // ✅ Routes'tan hesaplanan bitiş
+    }));
 
     return res.json({
       page: Number(page),
@@ -1691,12 +1743,7 @@ exports.isAtamalarim = async (req, res) => {
     if (sofor && isId(sofor)) q.sofor = sofor;
     if (isDurumu) q.isDurumu = isDurumu;
 
-    // ✅ Tarih aralığı filtresi
-    if (startDate || endDate) {
-      q.transferTarihi = {};
-      if (startDate) q.transferTarihi.$gte = new Date(startDate);
-      if (endDate) q.transferTarihi.$lte = new Date(endDate);
-    }
+    // ⚠️ Tarih filtresini routes'tan hesapladıktan sonra yapacağız!
 
     // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
     if (lokasyon && isId(lokasyon)) {
@@ -1856,8 +1903,20 @@ exports.isAtamalarim = async (req, res) => {
       computed.push({ item: t, detay: d, start, end });
     }
 
-    // ✅ Filtre: Geçmiş gelmeyecek
-    const filtered = computed.filter(({ end }) => {
+    // ✅ Filtre 1: Tarih aralığı kontrolü (overlap)
+    let dateFiltered = computed;
+    if (startDate || endDate) {
+      const filterStart = startDate ? new Date(startDate) : new Date(0);
+      const filterEnd = endDate ? new Date(endDate) : new Date(9999, 11, 31);
+      
+      dateFiltered = computed.filter(({ start, end }) => {
+        if (!start || !end) return false;
+        return start <= filterEnd && end >= filterStart;
+      });
+    }
+
+    // ✅ Filtre 2: Geçmiş gelmeyecek
+    const filtered = dateFiltered.filter(({ end }) => {
       if (!end) return false;
       return end >= IST_TODAY_START;
     });
@@ -1877,7 +1936,12 @@ exports.isAtamalarim = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const paged = filtered.slice(skip, skip + Number(limit));
 
-    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+    const items = paged.map(({ item, detay, start, end }) => ({ 
+      ...item, 
+      detay,
+      baslangicTarihi: start, // ✅ Routes'tan hesaplanan başlangıç
+      bitisTarihi: end        // ✅ Routes'tan hesaplanan bitiş
+    }));
 
     // Yanıt
     res.json({
