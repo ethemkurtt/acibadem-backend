@@ -1,6 +1,9 @@
 // controllers/user.controller.js
 const User = require("../models/user.model");
 
+// ⚡ Optimizasyon araçları
+const dataLoader = require("../utils/dataLoader");
+
 // Map/Mixed/Map-like -> plain object
 function mapToPlain(objOrMap) {
   if (!objOrMap) return {};
@@ -144,18 +147,142 @@ exports.createUser = async (req, res) => {
   }
 };
 
-// ✅ Hepsini getir
+// ✅ Hepsini getir - OPTIMIZE EDİLDİ
 exports.getAllUsers = async (_req, res) => {
   try {
+    // ⚡ OPTIMIZE: Populate olmadan çek
     const users = await User.find()
       .sort({ name: 1 })
-      .populate("departman", "ad")
-      .populate("lokasyonlar", "ad")
-      .populate("lokasyon", "ad")
-      .populate("bolge", "ad")
-      .populate("ulke", "ad");
+      .lean();
 
-    const enriched = await Promise.all(users.map(u => userResponse(u)));
+    if (users.length === 0) return res.json([]);
+
+    // ⚡ OPTIMIZE: RoleGroup'ları batch çek (N+1 problemi çözüldü)
+    const RoleGroup = require("../models/roleGroup.model");
+    const uniqueRoleGroupIds = [...new Set(users.map(u => u.roleGroupId).filter(Boolean))];
+    const roleGroups = await RoleGroup.find({ roleGroupId: { $in: uniqueRoleGroupIds } }).lean();
+    const roleGroupMap = new Map(roleGroups.map(g => [g.roleGroupId, g]));
+
+    // ⚡ OPTIMIZE: Referans ID'leri topla
+    const departmanIds = [];
+    const lokasyonIds = [];
+    const bolgeIds = [];
+    const ulkeIds = [];
+
+    users.forEach(u => {
+      if (u.departman) departmanIds.push(u.departman);
+      if (u.bolge) bolgeIds.push(u.bolge);
+      if (u.ulke) ulkeIds.push(u.ulke);
+      
+      // Lokasyonlar array
+      if (Array.isArray(u.lokasyonlar)) {
+        lokasyonIds.push(...u.lokasyonlar);
+      }
+      // Legacy tekil lokasyon
+      if (u.lokasyon) lokasyonIds.push(u.lokasyon);
+    });
+
+    // ⚡ OPTIMIZE: Batch çek (cache'den gelir)
+    const [departmanMap, lokasyonMap, bolgeMap, ulkeMap] = await Promise.all([
+      // Departman
+      (async () => {
+        if (departmanIds.length === 0) return new Map();
+        const Departman = require("../models/departman.model");
+        const docs = await Departman.find({ _id: { $in: [...new Set(departmanIds.map(String))] } })
+          .select("ad")
+          .lean();
+        return new Map(docs.map(d => [String(d._id), d]));
+      })(),
+      // Lokasyon (cache'den)
+      (async () => {
+        if (lokasyonIds.length === 0) return new Map();
+        const uniqueIds = [...new Set(lokasyonIds.map(String))];
+        const docs = await dataLoader.getLokasyonsByIds(uniqueIds);
+        const map = new Map();
+        docs.forEach((doc, idx) => {
+          if (doc) map.set(uniqueIds[idx], doc);
+        });
+        return map;
+      })(),
+      // Bölge (cache'den)
+      (async () => {
+        if (bolgeIds.length === 0) return new Map();
+        const uniqueIds = [...new Set(bolgeIds.map(String))];
+        const docs = await Promise.all(uniqueIds.map(id => dataLoader.getBolgeById(id)));
+        const map = new Map();
+        docs.forEach((doc, idx) => {
+          if (doc) map.set(uniqueIds[idx], doc);
+        });
+        return map;
+      })(),
+      // Ülke (cache'den)
+      (async () => {
+        if (ulkeIds.length === 0) return new Map();
+        const uniqueIds = [...new Set(ulkeIds.map(String))];
+        const docs = await Promise.all(uniqueIds.map(id => dataLoader.getUlkeById(id)));
+        const map = new Map();
+        docs.forEach((doc, idx) => {
+          if (doc) map.set(uniqueIds[idx], doc);
+        });
+        return map;
+      })(),
+    ]);
+
+    // ⚡ OPTIMIZE: Batch response oluştur (her user için ayrı sorgu yok!)
+    const enriched = users.map(user => {
+      const group = roleGroupMap.get(user.roleGroupId);
+      const groupYetkiler = group ? mapToPlain(group.yetkiler) : {};
+      const userYetkiler = mapToPlain(user.yetkiler);
+
+      // Lokasyonlar
+      const lokDocs = [];
+      if (Array.isArray(user.lokasyonlar)) {
+        user.lokasyonlar.forEach(id => {
+          const doc = lokasyonMap.get(String(id));
+          if (doc) lokDocs.push(doc);
+        });
+      }
+      if (user.lokasyon && !lokDocs.length) {
+        const doc = lokasyonMap.get(String(user.lokasyon));
+        if (doc) lokDocs.push(doc);
+      }
+
+      // Departman
+      const departman = user.departman ? departmanMap.get(String(user.departman)) : null;
+      const bolge = user.bolge ? bolgeMap.get(String(user.bolge)) : null;
+      const ulke = user.ulke ? ulkeMap.get(String(user.ulke)) : null;
+
+      return {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        organizasyon: user.organizasyon || null,
+        personelGrubu: user.personelGrubu || null,
+        roleGroupId: user.roleGroupId,
+        roleGroupName: group?.roleGroupName || null,
+        tc: user.tc,
+        telefon: user.telefon,
+        mail: user.mail,
+        dogumTarihi: user.dogumTarihi,
+        cinsiyet: user.cinsiyet,
+        ehliyet: user.ehliyet,
+        departman: departman?._id || null,
+        departmanName: departman?.ad || null,
+        lokasyonlar: lokDocs.map(l => l._id).filter(Boolean),
+        lokasyonlarNames: lokDocs.map(l => l.ad).filter(Boolean),
+        bolge: bolge?._id || null,
+        bolgeName: bolge?.ad || null,
+        ulke: ulke?._id || null,
+        ulkeName: ulke?.ad || null,
+        yetkiler: userYetkiler,
+        roleGroup: group ? {
+          roleGroupId: group.roleGroupId,
+          roleGroupName: group.roleGroupName,
+          yetkiler: groupYetkiler
+        } : null
+      };
+    });
+
     res.json(enriched);
   } catch (err) {
     console.error("getAllUsers hatası:", err);
@@ -163,18 +290,70 @@ exports.getAllUsers = async (_req, res) => {
   }
 };
 
-// ✅ Tek kullanıcı
+// ✅ Tek kullanıcı - OPTIMIZE EDİLDİ
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate("departman", "ad")
-      .populate("lokasyonlar", "ad")
-      .populate("lokasyon", "ad")
-      .populate("bolge", "ad")
-      .populate("ulke", "ad");
-
+    // ⚡ OPTIMIZE: Populate olmadan çek
+    const user = await User.findById(req.params.id).lean();
     if (!user) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
-    res.json(await userResponse(user));
+
+    // ⚡ OPTIMIZE: Referansları batch çek (cache'den)
+    const [roleGroup, departman, lokasyonlar, lokasyon, bolge, ulke] = await Promise.all([
+      (async () => {
+        if (!user.roleGroupId) return null;
+        const RoleGroup = require("../models/roleGroup.model");
+        return await RoleGroup.findOne({ roleGroupId: user.roleGroupId }).lean();
+      })(),
+      user.departman ? (async () => {
+        const Departman = require("../models/departman.model");
+        return await Departman.findById(user.departman).select("ad").lean();
+      })() : null,
+      (async () => {
+        if (!Array.isArray(user.lokasyonlar) || user.lokasyonlar.length === 0) return [];
+        return await dataLoader.getLokasyonsByIds(user.lokasyonlar.map(String));
+      })(),
+      user.lokasyon ? dataLoader.getLokasyonById(user.lokasyon) : null,
+      user.bolge ? dataLoader.getBolgeById(user.bolge) : null,
+      user.ulke ? dataLoader.getUlkeById(user.ulke) : null,
+    ]);
+
+    // Lokasyonları birleştir
+    const lokDocs = lokasyonlar.length > 0 ? lokasyonlar : (lokasyon ? [lokasyon] : []);
+
+    const groupYetkiler = roleGroup ? mapToPlain(roleGroup.yetkiler) : {};
+    const userYetkiler = mapToPlain(user.yetkiler);
+
+    const response = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      organizasyon: user.organizasyon || null,
+      personelGrubu: user.personelGrubu || null,
+      roleGroupId: user.roleGroupId,
+      roleGroupName: roleGroup?.roleGroupName || null,
+      tc: user.tc,
+      telefon: user.telefon,
+      mail: user.mail,
+      dogumTarihi: user.dogumTarihi,
+      cinsiyet: user.cinsiyet,
+      ehliyet: user.ehliyet,
+      departman: departman?._id || null,
+      departmanName: departman?.ad || null,
+      lokasyonlar: lokDocs.map(l => l?._id).filter(Boolean),
+      lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
+      bolge: bolge?._id || null,
+      bolgeName: bolge?.ad || null,
+      ulke: ulke?._id || null,
+      ulkeName: ulke?.ad || null,
+      yetkiler: userYetkiler,
+      roleGroup: roleGroup ? {
+        roleGroupId: roleGroup.roleGroupId,
+        roleGroupName: roleGroup.roleGroupName,
+        yetkiler: groupYetkiler
+      } : null
+    };
+
+    res.json(response);
   } catch (err) {
     console.error("getUserById hatası:", err);
     res.status(500).json({ error: "Kullanıcı getirilemedi." });
@@ -247,25 +426,51 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-// ✅ Şoför listesi
+// ✅ Şoför listesi - OPTIMIZE EDİLDİ
 exports.getSoforler = async (_req, res) => {
   try {
+    // ⚡ OPTIMIZE: Populate olmadan çek
     const soforler = await User.find({ roleGroupId: "sofor" })
       .select("name telefon musaitlik lokasyonlar lokasyon")
-      .populate("lokasyonlar", "ad")
-      .populate("lokasyon", "ad");
+      .lean();
+
+    if (soforler.length === 0) return res.json([]);
+
+    // ⚡ OPTIMIZE: Lokasyon ID'lerini topla
+    const lokasyonIds = [];
+    soforler.forEach(u => {
+      if (Array.isArray(u.lokasyonlar)) lokasyonIds.push(...u.lokasyonlar);
+      if (u.lokasyon) lokasyonIds.push(u.lokasyon);
+    });
+
+    // ⚡ OPTIMIZE: Batch çek (cache'den)
+    const uniqueIds = [...new Set(lokasyonIds.map(String))];
+    const lokasyonDocs = await dataLoader.getLokasyonsByIds(uniqueIds);
+    const lokasyonMap = new Map();
+    lokasyonDocs.forEach((doc, idx) => {
+      if (doc) lokasyonMap.set(uniqueIds[idx], doc);
+    });
 
     const out = soforler.map(u => {
-      const lokDocs = (u.lokasyonlar && u.lokasyonlar.length)
-        ? u.lokasyonlar
-        : (u.lokasyon ? [u.lokasyon] : []);
+      const lokDocs = [];
+      if (Array.isArray(u.lokasyonlar)) {
+        u.lokasyonlar.forEach(id => {
+          const doc = lokasyonMap.get(String(id));
+          if (doc) lokDocs.push(doc);
+        });
+      }
+      if (u.lokasyon && !lokDocs.length) {
+        const doc = lokasyonMap.get(String(u.lokasyon));
+        if (doc) lokDocs.push(doc);
+      }
+
       return {
         _id: u._id,
         name: u.name,
         telefon: u.telefon,
         musaitlik: u.musaitlik,
-        lokasyonlar: lokDocs.map(l => l?._id ?? l).filter(Boolean),
-        lokasyonlarNames: lokDocs.map(l => l?.ad).filter(Boolean),
+        lokasyonlar: lokDocs.map(l => l._id).filter(Boolean),
+        lokasyonlarNames: lokDocs.map(l => l.ad).filter(Boolean),
       };
     });
 

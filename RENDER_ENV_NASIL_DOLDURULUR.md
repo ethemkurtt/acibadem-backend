@@ -286,3 +286,4 @@ Hata varsa hangi değişken eksik/yanlış loglardan anlaşılır.
 
 Başarılar! 🚀
 
+
