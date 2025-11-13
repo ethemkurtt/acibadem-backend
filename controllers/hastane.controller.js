@@ -2,6 +2,9 @@ const XLSX = require("xlsx");
 const path = require("path");
 const Hastane = require("../models/hastane/hastane.model");
 
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 // HASTANELERİ İÇE AKTAR
 exports.importHastaneler = async (req, res) => {
   try {
@@ -65,6 +68,10 @@ exports.deleteAllHastaneler = async (req, res) => {
 exports.createHastene = async (req, res) => {
   try {
     const hastane = await Hastane.create(req.body);
+    
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateHastane(hastane._id).catch(() => {});
+    
     res.status(201).json({
       message: "Hastane başarıyla oluşturuldu",
       data: hastane
@@ -87,6 +94,10 @@ exports.deleteHastene = async (req, res) => {
         data: null
       });
     }
+    
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidateHastane(req.params.id).catch(() => {});
+    
     res.json({
       message: "Hastane başarıyla silindi",
       data: deleted
@@ -116,6 +127,9 @@ exports.updateHastane = async (req, res) => {
     );
 
     if (!updated) return res.status(404).json({ message: "Hastane bulunamadı", data: null });
+
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateHastane(id).catch(() => {});
 
     res.json({ message: "Hastane başarıyla güncellendi", data: updated });
   } catch (err) {

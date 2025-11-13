@@ -719,7 +719,7 @@ exports.getFullById = async (req, res) => {
 
 exports.aracIsEmri = async (req, res) => {
   try {
-    const { requestType, sofor, lokasyon, page = 1, limit = 20 } = req.query;
+    const { requestType, sofor, lokasyon, isDurumu, startDate, endDate, page = 1, limit = 20 } = req.query;
 
     // ---- Kullanıcının lokasyonlarını topla ----
     const user = req.user || {};
@@ -756,6 +756,14 @@ exports.aracIsEmri = async (req, res) => {
 
     if (requestType) q.requestType = requestType;
     if (sofor && isId(sofor)) q.sofor = sofor;
+    if (isDurumu) q.isDurumu = isDurumu; // ✅ İş durumu filtresi
+
+    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
+    if (startDate || endDate) {
+      q.transferTarihi = {};
+      if (startDate) q.transferTarihi.$gte = new Date(startDate);
+      if (endDate) q.transferTarihi.$lte = new Date(endDate);
+    }
 
     // Lokasyon filtresi
     if (lokasyon && isId(lokasyon)) {
@@ -766,18 +774,10 @@ exports.aracIsEmri = async (req, res) => {
       q.lokasyon = { $in: userLokasyonIds };
     }
 
-    // Sayfalama
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // ⚡ OPTIMIZE: Populate'siz çek
-    const [rawItems, total] = await Promise.all([
-      Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Talepler.countDocuments(q),
-    ]);
+    // ⚡ OPTIMIZE: Populate'siz çek (sayfalama yapMAdanfiltre yapacağız)
+    const rawItems = await Talepler.find(q)
+      .sort({ transferTarihi: 1, createdAt: -1 })
+      .lean();
 
     // ---- Detaylar (hasta/personel/misafir/diger) ----
     const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
@@ -874,16 +874,73 @@ exports.aracIsEmri = async (req, res) => {
     // ⚡ OPTIMIZE: Talepler için batch populate
     const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
 
-    // Nihai dönüş (detaylı JSON)
-    const items = populatedItems.map((t) => {
-      const detay = detayMap.get(String(t._id)) || null;
+    // ✅ Tarih hesaplama yardımcıları (aracTalep'ten alındı)
+    const normDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+    const IST_TODAY_START = (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    })();
+
+    // ✅ routes içinden başlangıç(ilk pickup) ve bitiş(son drop) hesapla
+    const computed = []; // { item, detay, start, end }
+
+    for (const t of populatedItems) {
+      const d = detayMap.get(String(t._id)) || null;
+
+      // default: transferTarihi yedeği
+      let start = null;
+      let end = null;
+
+      if (d && Array.isArray(d.routes) && d.routes.length) {
+        // min/max tarih çıkarımı
+        for (const r of d.routes) {
+          const base = r?.toObject ? r.toObject() : r;
+
+          // tarih çıkarımı
+          const pickupArr = toArray(base.pickup);
+          const dropArr = toArray(base.drop);
+
+          const pickupDates = pickupArr
+            .map((p) => normDate(p?.date))
+            .filter(Boolean);
+          const dropDates = dropArr
+            .map((p) => normDate(p?.date))
+            .filter(Boolean);
+
+          const localMinPickup =
+            pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+          const localMaxDrop = dropDates.length
+            ? new Date(Math.max(...dropDates))
+            : pickupDates.length
+            ? new Date(Math.max(...pickupDates))
+            : null;
+
+          if (localMinPickup && (!start || localMinPickup < start)) {
+            start = localMinPickup;
+          }
+          if (localMaxDrop && (!end || localMaxDrop > end)) {
+            end = localMaxDrop;
+          }
+        }
+      }
+
+      // Yedek: routes yoksa transferTarihi'ni dene
+      if (!start) start = normDate(t.transferTarihi);
+      if (!end) end = normDate(t.transferTarihi);
+
+      // Detaydan location bilgileri
       let nereden = "-",
         nereye = "-",
         kisiSayisi = "-",
         tarihSaat = "-";
 
-      if (detay?.routes?.length) {
-        const r = detay.routes[0];
+      if (d?.routes?.length) {
+        const r = d.routes[0];
         nereden = r?.pickup?.locationName || "-";
         nereye = r?.drop?.locationName || "-";
         kisiSayisi = r?.pickup?.person || r?.drop?.person || "-";
@@ -891,22 +948,47 @@ exports.aracIsEmri = async (req, res) => {
         tarihSaat = date ? new Date(date).toLocaleString("tr-TR") : "-";
       }
 
-      return {
-        ...t,
-        detay,
-        nereden,
-        nereye,
-        kisiSayisi,
-        tarihSaat,
-      };
+      computed.push({ item: t, detay: d, start, end, nereden, nereye, kisiSayisi, tarihSaat });
+    }
+
+    // ✅ Filtre: Bitiş tarihi < bugün 00:00 ise gösterme (geçmiş gelmeyecek)
+    const filtered = computed.filter(({ end }) => {
+      if (!end) return false; // tarih yoksa listeleme
+      return end >= IST_TODAY_START; // ✅ Bugün veya gelecekteki işleri göster
     });
+
+    // ✅ Sıralama: başlangıç (min pickup) eskiden → yeniye
+    filtered.sort((a, b) => {
+      const ax = a.start ? a.start.getTime() : Number.MAX_SAFE_INTEGER;
+      const bx = b.start ? b.start.getTime() : Number.MAX_SAFE_INTEGER;
+      if (ax !== bx) return ax - bx;
+      // eşitlikte createdAt ile bağla
+      const ac = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const bc = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return bc - ac;
+    });
+
+    // ✅ Sayfalama (filtre + sıralamadan sonra)
+    const total = filtered.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paged = filtered.slice(skip, skip + Number(limit));
+
+    // Nihai dönüş
+    const items = paged.map(({ item, detay, nereden, nereye, kisiSayisi, tarihSaat }) => ({
+      ...item,
+      detay,
+      nereden,
+      nereye,
+      kisiSayisi,
+      tarihSaat,
+    }));
 
     res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
-      filters: { startDate: null, endDate: null },
+      filters: { startDate, endDate, isDurumu, requestType, lokasyon },
     });
   } catch (err) {
     console.error("❌ aracIsEmri listesi alınamadı:", err);
@@ -918,7 +1000,7 @@ exports.aracIsEmri = async (req, res) => {
 
 exports.taleplerim = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { requestType, isDurumu, startDate, endDate, lokasyon, page = 1, limit = 20 } = req.query;
 
     // Giriş yapan kullanıcı id'si (JWT middleware'den)
     const userIdRaw = req.user?._id || req.userId;
@@ -929,34 +1011,201 @@ exports.taleplerim = async (req, res) => {
       ? new ObjectId(userIdRaw)
       : userIdRaw;
 
-    // YEGANE filtre: sadece kendi oluşturdukları
-    const q = { talepEdenId };
+    // ---- Ana filtre nesnesi ----
+    const q = { talepEdenId }; // Sadece kendi talepleri
 
-    // Sayfalama
-    const skip = (Number(page) - 1) * Number(limit);
+    // ✅ Diğer filtreler
+    if (requestType) q.requestType = requestType;
+    if (isDurumu) q.isDurumu = isDurumu;
+    if (lokasyon && isId(lokasyon)) q.lokasyon = new ObjectId(lokasyon);
 
-    // ⚡ OPTIMIZE: Populate'siz çek, sonra batch populate
-    const [rawItems, total] = await Promise.all([
-      Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Talepler.countDocuments(q),
+    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
+    if (startDate || endDate) {
+      q.transferTarihi = {};
+      if (startDate) q.transferTarihi.$gte = new Date(startDate);
+      if (endDate) q.transferTarihi.$lte = new Date(endDate);
+    }
+
+    // ⚡ OPTIMIZE: Populate'siz çek (sayfalama daha sonra)
+    const rawItems = await Talepler.find(q)
+      .sort({ transferTarihi: 1, createdAt: -1 })
+      .lean();
+
+    // ---- Detayları toplu halde çek (N+1 yerine batched) ----
+    const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
+
+    for (const t of rawItems) {
+      const id = t?._id?.toString();
+      if (!id) continue;
+      const rt = (t.requestType || "").toLowerCase();
+      if (idsByType[rt]) idsByType[rt].push(id);
+    }
+
+    const POPULATE_HASTA_MISAFIR = [
+      { path: "companions" },
+      { path: "routes" },
+      { path: "notificationPerson" },
+    ];
+    const POPULATE_PERSONEL = [{ path: "companions" }, { path: "routes" }];
+
+    const [
+      hastaDetayList,
+      personelDetayList,
+      misafirDetayList,
+      digerDetayList,
+    ] = await Promise.all([
+      idsByType.hasta.length
+        ? HastaDetay.find({ talep_id: { $in: idsByType.hasta } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.personel.length
+        ? PersonelDetay.find({ talep_id: { $in: idsByType.personel } })
+            .populate(POPULATE_PERSONEL)
+            .lean()
+        : [],
+      idsByType.misafir.length
+        ? MisafirDetay.find({ talep_id: { $in: idsByType.misafir } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.diger.length
+        ? DigerDetay.find({ talep_id: { $in: idsByType.diger } }).lean()
+        : [],
     ]);
 
-    // ⚡ OPTIMIZE: Batch populate
-    const items = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    const allDetayWithBolge = [...hastaDetayList, ...misafirDetayList];
+    if (allDetayWithBolge.length > 0) {
+      const populatedDetay = await taleplerOptimizer.populateDetayBatch(allDetayWithBolge);
+      let idx = 0;
+      for (let i = 0; i < hastaDetayList.length; i++) {
+        hastaDetayList[i] = populatedDetay[idx++];
+      }
+      for (let i = 0; i < misafirDetayList.length; i++) {
+        misafirDetayList[i] = populatedDetay[idx++];
+      }
+    }
 
-    // Yanıt şeması aynı
+    const detayMap = new Map();
+    for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
+
+    // ⚡ OPTIMIZE: Tüm routes'ları topla ve tek seferde batch koordinat ekle
+    const needsCoord = new Set(["hasta", "misafir", "personel"]);
+    const routesToProcess = [];
+    const routeMetadata = []; // { talepId, detayRef, routeCount }
+    
+    for (const [talepId, detay] of detayMap.entries()) {
+      if (!detay || !detay.routes || detay.routes.length === 0) continue;
+      
+      const talep = rawItems.find((t) => String(t._id) === talepId);
+      if (!talep) continue;
+
+      const rt = (talep.requestType || "").toLowerCase();
+      if (needsCoord.has(rt)) {
+        routesToProcess.push(...detay.routes);
+        routeMetadata.push({ talepId, detay, routeCount: detay.routes.length });
+      }
+    }
+
+    // Tüm routes'ları tek seferde işle (N yerine 1 batch)
+    if (routesToProcess.length > 0) {
+      const processedRoutes = await taleplerOptimizer.addKordinatToRoutesBatch(routesToProcess);
+      
+      // İşlenmiş routes'ları geri yerleştir
+      let routeIdx = 0;
+      for (const meta of routeMetadata) {
+        meta.detay.routes = processedRoutes.slice(routeIdx, routeIdx + meta.routeCount);
+        routeIdx += meta.routeCount;
+      }
+    }
+
+    // ⚡ OPTIMIZE: Talepler için batch populate
+    const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+
+    // ✅ Tarih hesaplama yardımcıları
+    const normDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+    const IST_TODAY_START = (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    })();
+
+    // ✅ routes içinden başlangıç ve bitiş hesapla
+    const computed = [];
+
+    for (const t of populatedItems) {
+      const d = detayMap.get(String(t._id)) || null;
+
+      let start = null;
+      let end = null;
+
+      if (d && Array.isArray(d.routes) && d.routes.length) {
+        for (const r of d.routes) {
+          const base = r?.toObject ? r.toObject() : r;
+          const pickupArr = toArray(base.pickup);
+          const dropArr = toArray(base.drop);
+
+          const pickupDates = pickupArr.map((p) => normDate(p?.date)).filter(Boolean);
+          const dropDates = dropArr.map((p) => normDate(p?.date)).filter(Boolean);
+
+          const localMinPickup = pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+          const localMaxDrop = dropDates.length
+            ? new Date(Math.max(...dropDates))
+            : pickupDates.length
+            ? new Date(Math.max(...pickupDates))
+            : null;
+
+          if (localMinPickup && (!start || localMinPickup < start)) start = localMinPickup;
+          if (localMaxDrop && (!end || localMaxDrop > end)) end = localMaxDrop;
+        }
+      }
+
+      if (!start) start = normDate(t.transferTarihi);
+      if (!end) end = normDate(t.transferTarihi);
+
+      computed.push({ item: t, detay: d, start, end });
+    }
+
+    // ✅ Filtre: Geçmiş gelmeyecek
+    const filtered = computed.filter(({ end }) => {
+      if (!end) return false;
+      return end >= IST_TODAY_START;
+    });
+
+    // ✅ Sıralama
+    filtered.sort((a, b) => {
+      const ax = a.start ? a.start.getTime() : Number.MAX_SAFE_INTEGER;
+      const bx = b.start ? b.start.getTime() : Number.MAX_SAFE_INTEGER;
+      if (ax !== bx) return ax - bx;
+      const ac = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const bc = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return bc - ac;
+    });
+
+    // ✅ Sayfalama
+    const total = filtered.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paged = filtered.slice(skip, skip + Number(limit));
+
+    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+
     return res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
+      filters: { startDate, endDate, isDurumu, requestType, lokasyon },
     });
   } catch (err) {
-    console.error("❌ aracIsEmri listesi alınamadı:", err);
+    console.error("❌ taleplerim listesi alınamadı:", err);
     return res
       .status(500)
       .json({ message: "Talepler listelenemedi", error: err.message });
@@ -1017,9 +1266,224 @@ exports.islerim = async (req, res) => {
   }
 };
 
+// ✅ YENİ: Geçmiş Taleplerim (Tamamlanmış/Geçmiş tarihli talepler)
+exports.gecmisTaleplerim = async (req, res) => {
+  try {
+    const { requestType, isDurumu, startDate, endDate, lokasyon, page = 1, limit = 20 } = req.query;
+
+    // Giriş yapan kullanıcı id'si (JWT middleware'den)
+    const userIdRaw = req.user?._id || req.userId;
+    if (!userIdRaw) {
+      return res.status(401).json({ error: "Kullanıcı doğrulanamadı." });
+    }
+    const talepEdenId = ObjectId.isValid(userIdRaw)
+      ? new ObjectId(userIdRaw)
+      : userIdRaw;
+
+    // ---- Ana filtre nesnesi ----
+    const q = { talepEdenId }; // Sadece kendi talepleri
+
+    // ✅ Diğer filtreler
+    if (requestType) q.requestType = requestType;
+    if (isDurumu) q.isDurumu = isDurumu;
+    if (lokasyon && isId(lokasyon)) q.lokasyon = new ObjectId(lokasyon);
+
+    // ✅ Tarih aralığı filtresi (transferTarihi üzerinde)
+    if (startDate || endDate) {
+      q.transferTarihi = {};
+      if (startDate) q.transferTarihi.$gte = new Date(startDate);
+      if (endDate) q.transferTarihi.$lte = new Date(endDate);
+    }
+
+    // ⚡ OPTIMIZE: Populate'siz çek (sayfalama daha sonra)
+    const rawItems = await Talepler.find(q)
+      .sort({ transferTarihi: -1, createdAt: -1 }) // Geçmişe göre sırala (yeniden eskiye)
+      .lean();
+
+    // ---- Detayları toplu halde çek (N+1 yerine batched) ----
+    const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
+
+    for (const t of rawItems) {
+      const id = t?._id?.toString();
+      if (!id) continue;
+      const rt = (t.requestType || "").toLowerCase();
+      if (idsByType[rt]) idsByType[rt].push(id);
+    }
+
+    const POPULATE_HASTA_MISAFIR = [
+      { path: "companions" },
+      { path: "routes" },
+      { path: "notificationPerson" },
+    ];
+    const POPULATE_PERSONEL = [{ path: "companions" }, { path: "routes" }];
+
+    const [
+      hastaDetayList,
+      personelDetayList,
+      misafirDetayList,
+      digerDetayList,
+    ] = await Promise.all([
+      idsByType.hasta.length
+        ? HastaDetay.find({ talep_id: { $in: idsByType.hasta } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.personel.length
+        ? PersonelDetay.find({ talep_id: { $in: idsByType.personel } })
+            .populate(POPULATE_PERSONEL)
+            .lean()
+        : [],
+      idsByType.misafir.length
+        ? MisafirDetay.find({ talep_id: { $in: idsByType.misafir } })
+            .populate(POPULATE_HASTA_MISAFIR)
+            .lean()
+        : [],
+      idsByType.diger.length
+        ? DigerDetay.find({ talep_id: { $in: idsByType.diger } }).lean()
+        : [],
+    ]);
+
+    // ⚡ OPTIMIZE: Detay'daki bolge/country'yi batch populate et
+    const allDetayWithBolge = [...hastaDetayList, ...misafirDetayList];
+    if (allDetayWithBolge.length > 0) {
+      const populatedDetay = await taleplerOptimizer.populateDetayBatch(allDetayWithBolge);
+      let idx = 0;
+      for (let i = 0; i < hastaDetayList.length; i++) {
+        hastaDetayList[i] = populatedDetay[idx++];
+      }
+      for (let i = 0; i < misafirDetayList.length; i++) {
+        misafirDetayList[i] = populatedDetay[idx++];
+      }
+    }
+
+    const detayMap = new Map();
+    for (const d of hastaDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of personelDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of misafirDetayList) detayMap.set(String(d.talep_id), d);
+    for (const d of digerDetayList) detayMap.set(String(d.talep_id), d);
+
+    // ⚡ OPTIMIZE: Tüm routes'ları topla ve tek seferde batch koordinat ekle
+    const needsCoord = new Set(["hasta", "misafir", "personel"]);
+    const routesToProcess = [];
+    const routeMetadata = []; // { talepId, detayRef, routeCount }
+    
+    for (const [talepId, detay] of detayMap.entries()) {
+      if (!detay || !detay.routes || detay.routes.length === 0) continue;
+      
+      const talep = rawItems.find((t) => String(t._id) === talepId);
+      if (!talep) continue;
+
+      const rt = (talep.requestType || "").toLowerCase();
+      if (needsCoord.has(rt)) {
+        routesToProcess.push(...detay.routes);
+        routeMetadata.push({ talepId, detay, routeCount: detay.routes.length });
+      }
+    }
+
+    // Tüm routes'ları tek seferde işle (N yerine 1 batch)
+    if (routesToProcess.length > 0) {
+      const processedRoutes = await taleplerOptimizer.addKordinatToRoutesBatch(routesToProcess);
+      
+      // İşlenmiş routes'ları geri yerleştir
+      let routeIdx = 0;
+      for (const meta of routeMetadata) {
+        meta.detay.routes = processedRoutes.slice(routeIdx, routeIdx + meta.routeCount);
+        routeIdx += meta.routeCount;
+      }
+    }
+
+    // ⚡ OPTIMIZE: Talepler için batch populate
+    const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
+
+    // ✅ Tarih hesaplama yardımcıları
+    const normDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+    const IST_TODAY_START = (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    })();
+
+    // ✅ routes içinden başlangıç ve bitiş hesapla
+    const computed = [];
+
+    for (const t of populatedItems) {
+      const d = detayMap.get(String(t._id)) || null;
+
+      let start = null;
+      let end = null;
+
+      if (d && Array.isArray(d.routes) && d.routes.length) {
+        for (const r of d.routes) {
+          const base = r?.toObject ? r.toObject() : r;
+          const pickupArr = toArray(base.pickup);
+          const dropArr = toArray(base.drop);
+
+          const pickupDates = pickupArr.map((p) => normDate(p?.date)).filter(Boolean);
+          const dropDates = dropArr.map((p) => normDate(p?.date)).filter(Boolean);
+
+          const localMinPickup = pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+          const localMaxDrop = dropDates.length
+            ? new Date(Math.max(...dropDates))
+            : pickupDates.length
+            ? new Date(Math.max(...pickupDates))
+            : null;
+
+          if (localMinPickup && (!start || localMinPickup < start)) start = localMinPickup;
+          if (localMaxDrop && (!end || localMaxDrop > end)) end = localMaxDrop;
+        }
+      }
+
+      if (!start) start = normDate(t.transferTarihi);
+      if (!end) end = normDate(t.transferTarihi);
+
+      computed.push({ item: t, detay: d, start, end });
+    }
+
+    // ✅ Filtre: SADECE GEÇMİŞ (bitiş tarihi bugünden önce)
+    const filtered = computed.filter(({ end }) => {
+      if (!end) return false;
+      return end < IST_TODAY_START; // ✅ Dün ve öncesi (geçmiş işler)
+    });
+
+    // ✅ Sıralama (yeniden eskiye)
+    filtered.sort((a, b) => {
+      const ax = a.end ? a.end.getTime() : 0;
+      const bx = b.end ? b.end.getTime() : 0;
+      if (ax !== bx) return bx - ax; // Tersten (yeni önce)
+      const ac = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const bc = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return bc - ac;
+    });
+
+    // ✅ Sayfalama
+    const total = filtered.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paged = filtered.slice(skip, skip + Number(limit));
+
+    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+
+    return res.json({
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      items,
+      filters: { startDate, endDate, isDurumu, requestType, lokasyon },
+    });
+  } catch (err) {
+    console.error("❌ gecmisTaleplerim listesi alınamadı:", err);
+    return res
+      .status(500)
+      .json({ message: "Geçmiş talepler listelenemedi", error: err.message });
+  }
+};
+
 exports.isAtamalarim = async (req, res) => {
   try {
-    const { requestType, sofor, lokasyon, page = 1, limit = 20 } = req.query;
+    const { requestType, sofor, lokasyon, isDurumu, startDate, endDate, page = 1, limit = 20 } = req.query;
 
     // ---- Kullanıcının lokasyonlarını topla ----
     const user = req.user || {};
@@ -1052,12 +1516,19 @@ exports.isAtamalarim = async (req, res) => {
 
     // ---- Ana filtre nesnesi ----
     const q = {};
-    // Zorunlu filtre: sadece ataması yapılmamış olanlar
-    q.atamaDurumu = "Evet";
+    q.atamaDurumu = "Evet"; // Ataması yapılmış olanlar
 
-    // Diğer filtreler:
+    // ✅ Diğer filtreler
     if (requestType) q.requestType = requestType;
     if (sofor && isId(sofor)) q.sofor = sofor;
+    if (isDurumu) q.isDurumu = isDurumu;
+
+    // ✅ Tarih aralığı filtresi
+    if (startDate || endDate) {
+      q.transferTarihi = {};
+      if (startDate) q.transferTarihi.$gte = new Date(startDate);
+      if (endDate) q.transferTarihi.$lte = new Date(endDate);
+    }
 
     // Lokasyon filtresi: kullanıcının yetkili olduğu lokasyonlarla kesiştir
     if (lokasyon && isId(lokasyon)) {
@@ -1068,18 +1539,10 @@ exports.isAtamalarim = async (req, res) => {
       q.lokasyon = { $in: userLokasyonIds };
     }
 
-    // Sayfalama
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // ⚡ OPTIMIZE: Populate'siz çek
-    const [rawItems, total] = await Promise.all([
-      Talepler.find(q)
-        .sort({ transferTarihi: 1, createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Talepler.countDocuments(q),
-    ]);
+    // ⚡ OPTIMIZE: Populate'siz çek (sayfalama daha sonra)
+    const rawItems = await Talepler.find(q)
+      .sort({ transferTarihi: 1, createdAt: -1 })
+      .lean();
 
     // ---- Detayları toplu halde çek (N+1 yerine batched) ----
     const idsByType = { hasta: [], personel: [], misafir: [], diger: [] };
@@ -1177,22 +1640,87 @@ exports.isAtamalarim = async (req, res) => {
     // ⚡ OPTIMIZE: Talepler için batch populate
     const populatedItems = await taleplerOptimizer.populateTaleplerBatch(rawItems);
 
-    // Son liste: item + detay
-    const items = populatedItems.map((t) => {
+    // ✅ Tarih hesaplama yardımcıları
+    const normDate = (v) => {
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d) ? null : d;
+    };
+    const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+    const IST_TODAY_START = (() => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    })();
+
+    // ✅ routes içinden başlangıç ve bitiş hesapla
+    const computed = [];
+
+    for (const t of populatedItems) {
       const d = detayMap.get(String(t._id)) || null;
-      return { ...t, detay: d };
+
+      let start = null;
+      let end = null;
+
+      if (d && Array.isArray(d.routes) && d.routes.length) {
+        for (const r of d.routes) {
+          const base = r?.toObject ? r.toObject() : r;
+          const pickupArr = toArray(base.pickup);
+          const dropArr = toArray(base.drop);
+
+          const pickupDates = pickupArr.map((p) => normDate(p?.date)).filter(Boolean);
+          const dropDates = dropArr.map((p) => normDate(p?.date)).filter(Boolean);
+
+          const localMinPickup = pickupDates.length ? new Date(Math.min(...pickupDates)) : null;
+          const localMaxDrop = dropDates.length
+            ? new Date(Math.max(...dropDates))
+            : pickupDates.length
+            ? new Date(Math.max(...pickupDates))
+            : null;
+
+          if (localMinPickup && (!start || localMinPickup < start)) start = localMinPickup;
+          if (localMaxDrop && (!end || localMaxDrop > end)) end = localMaxDrop;
+        }
+      }
+
+      if (!start) start = normDate(t.transferTarihi);
+      if (!end) end = normDate(t.transferTarihi);
+
+      computed.push({ item: t, detay: d, start, end });
+    }
+
+    // ✅ Filtre: Geçmiş gelmeyecek
+    const filtered = computed.filter(({ end }) => {
+      if (!end) return false;
+      return end >= IST_TODAY_START;
     });
 
-    // Yanıt (şema aynı, sadece her item'da `detay` var)
+    // ✅ Sıralama
+    filtered.sort((a, b) => {
+      const ax = a.start ? a.start.getTime() : Number.MAX_SAFE_INTEGER;
+      const bx = b.start ? b.start.getTime() : Number.MAX_SAFE_INTEGER;
+      if (ax !== bx) return ax - bx;
+      const ac = a.item.createdAt ? new Date(a.item.createdAt).getTime() : 0;
+      const bc = b.item.createdAt ? new Date(b.item.createdAt).getTime() : 0;
+      return bc - ac;
+    });
+
+    // ✅ Sayfalama
+    const total = filtered.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paged = filtered.slice(skip, skip + Number(limit));
+
+    const items = paged.map(({ item, detay }) => ({ ...item, detay }));
+
+    // Yanıt
     res.json({
       page: Number(page),
       limit: Number(limit),
       total,
       items,
-      filters: { startDate: null, endDate: null },
+      filters: { startDate, endDate, isDurumu, requestType, lokasyon },
     });
   } catch (err) {
-    console.error("❌ aracTalep listesi alınamadı:", err);
+    console.error("❌ isAtamalarim listesi alınamadı:", err);
     res
       .status(500)
       .json({ message: "Talepler listelenemedi", error: err.message });

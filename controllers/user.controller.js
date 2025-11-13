@@ -122,6 +122,9 @@ exports.createUser = async (req, res) => {
 
     await newUser.save();
 
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateUser(newUser._id).catch(() => {});
+
     const populatedUser = await User.findById(newUser._id)
       .populate("departman", "ad")
       .populate("lokasyonlar", "ad")
@@ -398,6 +401,9 @@ exports.updateUser = async (req, res) => {
 
     // $set
     const result = await User.updateOne({ _id: id }, { $set: raw }, { runValidators: true });
+
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateUser(id).catch(() => {});
 
     const after = await User.findById(id)
       .populate("departman", "ad")

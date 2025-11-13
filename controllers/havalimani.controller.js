@@ -2,6 +2,10 @@
 const XLSX = require("xlsx");
 const path = require("path");
 const Havalimani = require("../models/havalimanı/havalimani.model");
+
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 // Küçük yardımcılar
 const str = (v) => (v === null || v === undefined ? "" : String(v)).trim();
 
@@ -125,6 +129,9 @@ exports.createHavalimani = async (req, res) => {
       ilce_kodu: str(ilce_kodu),
     });
 
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateHavalimani(newRecord._id).catch(() => {});
+
     return res.status(201).json({
       message: "Havalimanı başarıyla oluşturuldu",
       data: newRecord,
@@ -160,6 +167,9 @@ exports.updateHavalimani = async (req, res) => {
       });
     }
 
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateHavalimani(req.params.id).catch(() => {});
+
     return res.json({
       message: "Havalimanı başarıyla güncellendi",
       data: updated,
@@ -182,6 +192,9 @@ exports.deleteHavalimani = async (req, res) => {
         data: null,
       });
     }
+
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidateHavalimani(req.params.id).catch(() => {});
 
     return res.json({
       message: "Havalimanı başarıyla silindi",

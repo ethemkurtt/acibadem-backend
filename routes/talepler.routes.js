@@ -21,6 +21,7 @@ router.get("/", ctrl.list);
 
 router.get("/aracTalep",   authRequired, ctrl.aracTalep);
 router.get("/taleplerim",  authRequired, ctrl.taleplerim);
+router.get("/gecmisTaleplerim",  authRequired, ctrl.gecmisTaleplerim); // ✅ YENİ: Geçmiş talepler
 router.get("/aracIsEmri",  authRequired, ctrl.aracIsEmri);
 router.get("/isAtamalarim",  authRequired, ctrl.isAtamalarim);
 router.get("/islerim",  authRequired, ctrl.islerim);

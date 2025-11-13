@@ -3,6 +3,9 @@ const path = require("path");
 const Bolge = require("../models/bolge.model");
 const Ulke = require("../models/ulke.model");
 
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 /** ✅ JSON'dan Bölge + Ülke ekleme */
 exports.importFromJson = async (req, res) => {
   try {
@@ -61,6 +64,10 @@ exports.getBolgeler = async (req, res) => {
 exports.createBolge = async (req, res) => {
   try {
     const bolge = await Bolge.create({ ad: req.body.ad });
+    
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateBolge(bolge._id).catch(() => {});
+    
     return res.status(201).json({
       message: "Bölge başarıyla oluşturuldu",
       data: bolge
@@ -88,6 +95,9 @@ exports.updateBolge = async (req, res) => {
       });
     }
 
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateBolge(req.params.id).catch(() => {});
+
     return res.json({
       message: "Bölge başarıyla güncellendi",
       data: bolge
@@ -111,6 +121,9 @@ exports.deleteBolge = async (req, res) => {
     }
 
     const countriesResult = await Ulke.deleteMany({ bolgeId: bolge._id });
+
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidateBolge(req.params.id).catch(() => {});
 
     return res.json({
       message: "Bölge ve bağlı ülkeler başarıyla silindi",
@@ -175,6 +188,9 @@ exports.createUlke = async (req, res) => {
     const { ad, bolgeId } = req.body;
     const ulke = await Ulke.create({ ad, bolgeId });
 
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateUlke(ulke._id).catch(() => {});
+
     return res.status(201).json({
       message: "Ülke başarıyla oluşturuldu",
       data: ulke
@@ -203,6 +219,9 @@ exports.updateUlke = async (req, res) => {
       });
     }
 
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateUlke(req.params.id).catch(() => {});
+
     return res.json({
       message: "Ülke başarıyla güncellendi",
       data: ulke
@@ -224,6 +243,9 @@ exports.deleteUlke = async (req, res) => {
         data: null
       });
     }
+
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidateUlke(req.params.id).catch(() => {});
 
     return res.json({
       message: "Ülke başarıyla silindi",

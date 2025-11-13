@@ -3,6 +3,9 @@ const path = require("path");
 const Lokasyon = require("../models/lokasyon.model");
 const mongoose = require("mongoose");
 
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 // 🟢 Excel'den toplu lokasyon yükleme
 exports.importLokasyonlar = async (req, res) => {
   try {
@@ -111,6 +114,9 @@ exports.patchLokasyon = async (req, res) => {
       });
     }
 
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidateLokasyon(req.params.id).catch(() => {});
+
     return res.json({
       message: "Lokasyon başarıyla güncellendi",
       data: updated
@@ -141,6 +147,9 @@ exports.createLokasyon = async (req, res) => {
       il_kodu: String(il_kodu),
       ilce_kodu: String(ilce_kodu)
     });
+
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidateLokasyon(yeniLokasyon._id).catch(() => {});
 
     return res.status(201).json({
       message: "Lokasyon başarıyla oluşturuldu",

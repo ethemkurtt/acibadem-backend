@@ -3,10 +3,17 @@ const XLSX = require("xlsx");
 const path = require("path");
 const Plaka = require("../models/Plaka");
 
+// ⚡ Cache invalidation için
+const dataLoader = require("../utils/dataLoader");
+
 // ---- CRUD ----
 exports.create = async (req, res) => {
   try {
     const created = await Plaka.create(req.body);
+    
+    // ⚡ Cache'e ekle (fire and forget)
+    dataLoader.invalidatePlaka(created._id).catch(() => {});
+    
     return res.status(201).json({
       message: "Plaka başarıyla oluşturuldu",
       data: created
@@ -92,6 +99,10 @@ exports.update = async (req, res) => {
         data: null
       });
     }
+    
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidatePlaka(req.params.id).catch(() => {});
+    
     return res.json({
       message: "Plaka başarıyla güncellendi",
       data: updated
@@ -118,6 +129,10 @@ exports.patch = async (req, res) => {
         data: null
       });
     }
+    
+    // ⚡ Cache'i temizle (fire and forget)
+    dataLoader.invalidatePlaka(req.params.id).catch(() => {});
+    
     return res.json({
       message: "Plaka başarıyla güncellendi",
       data: updated
@@ -140,6 +155,10 @@ exports.remove = async (req, res) => {
         data: null
       });
     }
+    
+    // ⚡ Cache'den sil (fire and forget)
+    dataLoader.invalidatePlaka(req.params.id).catch(() => {});
+    
     return res.json({
       message: "Plaka başarıyla silindi",
       data: deleted
