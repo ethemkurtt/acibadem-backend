@@ -36,6 +36,9 @@ const sohbetSchemas = {
 
 // ==================== ROUTES ====================
 
+// ✅ Kullanıcı ara (Yeni sohbet için)
+router.get("/users/search", authRequired, sohbetController.searchUsers);
+
 // ✅ Yeni sohbet başlat
 router.post(
   "/",

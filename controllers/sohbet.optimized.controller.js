@@ -5,6 +5,48 @@ const Mesaj = require("../models/Mesaj");
 const User = require("../models/user.model");
 const { sendMessageToRoom, sendNotificationToUser } = require("../utils/socketService");
 
+// ✅ Kullanıcı ara (Yeni sohbet başlatmak için)
+exports.searchUsers = async (req, res) => {
+  try {
+    const { search } = req.query;
+    const currentUser = req.user;
+
+    if (!search || search.trim().length < 2) {
+      return res.status(400).json({ 
+        error: "Arama terimi en az 2 karakter olmalı." 
+      });
+    }
+
+    // Regex ile isim veya email'de ara (case-insensitive)
+    const searchRegex = new RegExp(search.trim(), "i");
+
+    const users = await User.find({
+      _id: { $ne: currentUser._id }, // Kendisi hariç
+      $or: [
+        { name: searchRegex },
+        { email: searchRegex },
+      ],
+    })
+      .select("_id name email role departman lokasyon") // Sadece gerekli alanlar
+      .populate("departman", "name")
+      .populate("lokasyon", "name")
+      .limit(20) // Maksimum 20 sonuç
+      .lean();
+
+    return res.json({
+      message: "Kullanıcılar başarıyla getirildi.",
+      users,
+      total: users.length,
+    });
+  } catch (err) {
+    console.error("❌ Kullanıcı arama hatası:", err);
+    return res.status(500).json({ 
+      error: "Kullanıcı araması yapılamadı.", 
+      details: err.message 
+    });
+  }
+};
+
 // ✅ Sohbet oluştur (Optimize edilmiş)
 exports.createSohbet = async (req, res) => {
   try {

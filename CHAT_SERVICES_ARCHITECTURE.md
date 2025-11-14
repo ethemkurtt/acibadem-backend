@@ -516,6 +516,27 @@ class ChatService {
   // ==================== CHAT İŞLEMLERİ ====================
 
   /**
+   * Kullanıcı ara (Yeni sohbet başlatmak için)
+   * @param {string} search - Arama terimi (isim veya email)
+   * @returns {Promise<Array>} - Kullanıcı listesi
+   */
+  async searchUsers(search) {
+    try {
+      if (!search || search.trim().length < 2) {
+        return [];
+      }
+
+      const response = await HTTPService.get(
+        `/sohbet/users/search?search=${encodeURIComponent(search.trim())}`
+      );
+      return response.users || [];
+    } catch (error) {
+      console.error("Kullanıcı arama hatası:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Kullanıcının sohbetlerini getir
    */
   async getMySohbets() {
@@ -819,7 +840,46 @@ sohbetler.forEach((sohbet) => {
 });
 ```
 
-### 3. Yeni Sohbet Başlat
+### 3. Kullanıcı Ara (Yeni Sohbet İçin)
+
+```javascript
+// Kullanıcı ara input'u
+const searchInput = document.getElementById("search-input");
+
+searchInput.addEventListener("input", async (e) => {
+  const searchTerm = e.target.value;
+  
+  if (searchTerm.length < 2) {
+    // Arama terimi çok kısa
+    return;
+  }
+  
+  try {
+    const users = await ChatService.searchUsers(searchTerm);
+    console.log("Bulunan kullanıcılar:", users);
+    
+    // UI'de göster
+    displaySearchResults(users);
+  } catch (error) {
+    console.error("Arama hatası:", error);
+  }
+});
+
+// Örnek sonuç:
+// [
+//   {
+//     _id: "64abc123...",
+//     name: "Ethem Kurt",
+//     email: "ethem@example.com",
+//     role: "user",
+//     departman: { name: "IT" },
+//     lokasyon: { name: "İstanbul" }
+//   },
+//   ...
+// ]
+```
+
+### 4. Yeni Sohbet Başlat
 
 ```javascript
 const hedefUserId = "64abc123...";
@@ -835,7 +895,7 @@ try {
 }
 ```
 
-### 4. Mesajları Getir
+### 5. Mesajları Getir
 
 ```javascript
 const sohbetId = "64def456...";
@@ -852,7 +912,7 @@ mesajlar.forEach((mesaj) => {
 const eskiMesajlar = await ChatService.getMessages(sohbetId, 2, 50);
 ```
 
-### 5. Mesaj Gönder
+### 6. Mesaj Gönder
 
 ```javascript
 const sohbetId = "64def456...";
@@ -864,7 +924,7 @@ ChatService.sendMessage(sohbetId, mesaj);
 // Otomatik olarak HTTP fallback kullanır (WebSocket bağlı değilse)
 ```
 
-### 6. Event Listener'lar
+### 7. Event Listener'lar
 
 ```javascript
 // Yeni mesaj geldiğinde
@@ -913,7 +973,7 @@ ChatService.on("chat:deleted", (data) => {
 });
 ```
 
-### 7. Yazıyor Göstergesi
+### 8. Yazıyor Göstergesi
 
 ```javascript
 let typingTimeout = null;
@@ -938,7 +998,7 @@ sendButton.addEventListener("click", () => {
 });
 ```
 
-### 8. Okunmamış Mesaj Sayısı
+### 9. Okunmamış Mesaj Sayısı
 
 ```javascript
 // Sayacı güncelle
@@ -954,7 +1014,7 @@ async function updateUnreadBadge() {
 setInterval(updateUnreadBadge, 30000); // Her 30 saniye
 ```
 
-### 9. Cleanup (Sayfa Kapanırken)
+### 10. Cleanup (Sayfa Kapanırken)
 
 ```javascript
 window.addEventListener("beforeunload", () => {

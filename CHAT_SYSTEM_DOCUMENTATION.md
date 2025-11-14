@@ -267,7 +267,82 @@ socket.on("connect_error", (err) => {
 
 ## 🌐 HTTP API Endpoints
 
-### 1. Yeni Sohbet Başlat
+### 1. Kullanıcı Ara (Yeni Sohbet İçin)
+```http
+GET /api/sohbet/users/search?search=ethem%20kurt
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+**Query Parameters:**
+- `search` (string, required): Arama terimi (isim veya email)
+  - Minimum 2 karakter
+  - Case-insensitive
+  - Hem isimde hem email'de arar
+
+**Response:**
+```json
+{
+  "message": "Kullanıcılar başarıyla getirildi.",
+  "users": [
+    {
+      "_id": "64abc123...",
+      "name": "Ethem Kurt",
+      "email": "ethem@example.com",
+      "role": "user",
+      "departman": {
+        "_id": "64def...",
+        "name": "IT Departmanı"
+      },
+      "lokasyon": {
+        "_id": "64ghi...",
+        "name": "İstanbul"
+      }
+    },
+    {
+      "_id": "64xyz789...",
+      "name": "Ethem Yılmaz",
+      "email": "ethem.yilmaz@example.com",
+      "role": "admin",
+      "departman": {
+        "_id": "64jkl...",
+        "name": "Yönetim"
+      },
+      "lokasyon": {
+        "_id": "64mno...",
+        "name": "Ankara"
+      }
+    }
+  ],
+  "total": 2
+}
+```
+
+**Özellikler:**
+- ✅ Login olan kullanıcı hariç (kendisi çıkar)
+- ✅ İsim veya email'de arama yapar
+- ✅ Maksimum 20 sonuç
+- ✅ Departman ve lokasyon bilgileri dahil
+- ✅ Case-insensitive arama
+
+**Örnek Kullanım:**
+```javascript
+// Kullanıcı ara
+const searchTerm = "ethem kurt";
+const response = await fetch(
+  `/api/sohbet/users/search?search=${encodeURIComponent(searchTerm)}`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  }
+);
+const data = await response.json();
+console.log(data.users); // Bulunan kullanıcılar
+```
+
+---
+
+### 2. Yeni Sohbet Başlat
 ```http
 POST /api/sohbet
 Authorization: Bearer YOUR_JWT_TOKEN
@@ -299,7 +374,7 @@ Content-Type: application/json
 
 ---
 
-### 2. Kullanıcının Sohbetlerini Getir (Optimize)
+### 3. Kullanıcının Sohbetlerini Getir (Optimize)
 ```http
 GET /api/sohbet/my
 Authorization: Bearer YOUR_JWT_TOKEN
@@ -346,7 +421,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ---
 
-### 3. Sohbet Mesajlarını Getir (Pagination)
+### 4. Sohbet Mesajlarını Getir (Pagination)
 ```http
 GET /api/sohbet/64def456.../mesajlar?page=1&limit=50
 Authorization: Bearer YOUR_JWT_TOKEN
@@ -378,7 +453,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ---
 
-### 4. Mesaj Gönder (HTTP Fallback)
+### 5. Mesaj Gönder (HTTP Fallback)
 ```http
 POST /api/sohbet/mesaj
 Authorization: Bearer YOUR_JWT_TOKEN
