@@ -16,4 +16,10 @@ const mesajSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
+// ⚡ INDEXES - Performance için
+mesajSchema.index({ sohbet_id: 1, time: -1 }); // Sohbet mesajlarını tarihle getir
+mesajSchema.index({ sohbet_id: 1, read_at: 1 }); // Okunmamış mesajlar
+mesajSchema.index({ user_id: 1, time: -1 }); // Kullanıcının mesajları
+mesajSchema.index({ sohbet_id: 1, user_id: 1 }); // Kullanıcının sohbet mesajları
+
 module.exports = mongoose.model("Mesaj", mesajSchema);

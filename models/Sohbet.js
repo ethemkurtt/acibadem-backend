@@ -19,4 +19,8 @@ const sohbetSchema = new mongoose.Schema(
   { timestamps: true } // _id otomatik eklenecek
 );
 
+// ⚡ INDEXES - Performance için
+sohbetSchema.index({ baslatan_user_id: 1 }); // Başlatanın sohbetleri
+sohbetSchema.index({ createdAt: -1 }); // Yeni sohbetler
+
 module.exports = mongoose.model("Sohbet", sohbetSchema);

@@ -16,4 +16,9 @@ const sohbetKisileriSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
+// ⚡ INDEXES - Performance için
+sohbetKisileriSchema.index({ user_id: 1 }); // Kullanıcının sohbetleri
+sohbetKisileriSchema.index({ sohbet_id: 1 }); // Sohbetin katılımcıları
+sohbetKisileriSchema.index({ sohbet_id: 1, user_id: 1 }, { unique: true }); // Benzersiz katılımcı
+
 module.exports = mongoose.model("SohbetKisileri", sohbetKisileriSchema);

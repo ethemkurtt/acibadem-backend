@@ -2,6 +2,7 @@
 
 // ---- Core & 3rd party ----
 const express = require("express");
+const http = require("http");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
@@ -10,12 +11,16 @@ const path = require("path");
 
 // ---- App ----
 const app = express();
+const server = http.createServer(app);
 
 // ---- Config ----
 dotenv.config();
 
 // ⚡ OPTIMIZE: Cache Service
 const cacheService = require("./utils/cacheService");
+
+// ⚡ REAL-TIME: Socket.IO Service
+const socketService = require("./utils/socketService");
 
 // ---- Middleware ----
 app.use(cors());
@@ -50,7 +55,7 @@ const meRoutes              = require("./routes/me.routes");
 const roleGroupRoutes       = require("./routes/roleGroup.route");
 const sehirlerRouter        = require("./routes/sehirler");
 const plakalarRouter        = require("./routes/plakalar");
-const sohbetRoutes          = require("./routes/sohbet.routes");
+const sohbetRoutes          = require("./routes/sohbet.optimized.routes"); // ⚡ Optimize edilmiş sohbet sistemi
 
 // Yeni eklediklerin:
 const taleplerRoutes        = require("./routes/talepler.routes");
@@ -119,19 +124,42 @@ cacheService
     console.warn("⚠️  Cache başlatılamadı, normal modda devam ediliyor:", err.message);
   });
 
+// ⚡ REAL-TIME: Socket.IO başlat
+const io = socketService.initializeSocket(server);
+console.log("🔌 Socket.IO başlatıldı - Gerçek zamanlı iletişim aktif");
+
 // ---- Server ----
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Sunucu ${PORT} portunda çalışıyor`));
+server.listen(PORT, () => {
+  console.log(`🚀 Sunucu ${PORT} portunda çalışıyor`);
+  console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}`);
+  console.log(`⚡ Performans optimizasyonları aktif`);
+});
 
 // Graceful shutdown
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM sinyali alındı, sunucu kapatılıyor...");
-  await cacheService.disconnect();
-  process.exit(0);
-});
+const gracefulShutdown = async (signal) => {
+  console.log(`\n${signal} sinyali alındı, sunucu kapatılıyor...`);
+  
+  try {
+    // Socket.IO bağlantılarını kapat
+    if (io) {
+      console.log("🔌 Socket.IO bağlantıları kapatılıyor...");
+      io.close();
+    }
+    
+    // Redis bağlantısını kapat
+    await cacheService.disconnect();
+    
+    // MongoDB bağlantısını kapat
+    await mongoose.connection.close();
+    console.log("✅ Tüm bağlantılar başarıyla kapatıldı");
+    
+    process.exit(0);
+  } catch (err) {
+    console.error("❌ Graceful shutdown hatası:", err);
+    process.exit(1);
+  }
+};
 
-process.on("SIGINT", async () => {
-  console.log("SIGINT sinyali alındı, sunucu kapatılıyor...");
-  await cacheService.disconnect();
-  process.exit(0);
-});
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
