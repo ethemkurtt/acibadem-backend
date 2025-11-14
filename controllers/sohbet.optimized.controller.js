@@ -51,6 +51,7 @@ exports.searchUsers = async (req, res) => {
 exports.createSohbet = async (req, res) => {
   try {
     const user = req.user;
+    const currentUserId = new mongoose.Types.ObjectId(user._id);
     const { hedef_user_id, sohbet_tipi } = req.body;
 
     if (!hedef_user_id) {
@@ -64,10 +65,12 @@ exports.createSohbet = async (req, res) => {
     }
 
     // Mevcut sohbet var mı kontrol et (duplicate önleme)
+    const hedefUserObjectId = new mongoose.Types.ObjectId(hedef_user_id);
+
     const mevcutSohbet = await SohbetKisileri.aggregate([
       {
         $match: {
-          user_id: { $in: [user._id, new mongoose.Types.ObjectId(hedef_user_id)] },
+          user_id: { $in: [currentUserId, hedefUserObjectId] },
         },
       },
       {
@@ -109,13 +112,13 @@ exports.createSohbet = async (req, res) => {
     await SohbetKisileri.insertMany([
       {
         sohbet_id: yeniSohbet._id,
-        user_id: user._id,
+        user_id: currentUserId,
         user_name: user.name,
         user_email: user.email,
       },
       {
         sohbet_id: yeniSohbet._id,
-        user_id: hedef_user_id,
+        user_id: hedefUserObjectId,
         user_name: hedefUser.name,
         user_email: hedefUser.email,
       },
@@ -289,12 +292,13 @@ exports.getMessages = async (req, res) => {
 exports.getMySohbets = async (req, res) => {
   try {
     const user = req.user;
+    const userId = new mongoose.Types.ObjectId(user._id);
 
     // Aggregation pipeline ile optimize edilmiş sohbet listesi
     const sohbetler = await SohbetKisileri.aggregate([
       // 1. Kullanıcının katıldığı sohbetleri filtrele
       {
-        $match: { user_id: user._id },
+        $match: { user_id: userId },
       },
       // 2. Sohbet bilgilerini getir
       {
@@ -349,7 +353,7 @@ exports.getMySohbets = async (req, res) => {
                 $expr: {
                   $and: [
                     { $eq: ["$sohbet_id", "$$sohbet_id"] },
-                    { $ne: ["$user_id", user._id] },
+                    { $ne: ["$user_id", userId] },
                     { $eq: ["$read_at", null] },
                   ],
                 },
@@ -371,7 +375,7 @@ exports.getMySohbets = async (req, res) => {
                 $filter: {
                   input: "$katilimcilar",
                   as: "k",
-                  cond: { $ne: ["$$k.user_id", user._id] },
+                  cond: { $ne: ["$$k.user_id", userId] },
                 },
               },
               as: "k",
