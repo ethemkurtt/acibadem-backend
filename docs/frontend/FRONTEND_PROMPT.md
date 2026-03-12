@@ -344,5 +344,5 @@ export const TaleplerimPage: React.FC = () => {
 
 Herhangi bir sorunuz olursa:
 - Backend Developer: backend@acibadem.com
-- API Dokümantasyonu: `API_FRONTEND_KULLANIM.md` dosyasına bakın
+- API Dokümantasyonu: `docs/api/API_FRONTEND_KULLANIM.md` dosyasına bakın
 

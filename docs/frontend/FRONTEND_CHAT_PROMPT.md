@@ -822,7 +822,7 @@ npm run start
 
 ## 📚 Referanslar
 
-- Backend API Dokümantasyonu: `CHAT_SYSTEM_DOCUMENTATION.md`
+- Backend API Dokümantasyonu: `docs/chat/CHAT_SYSTEM_DOCUMENTATION.md`
 - Socket.IO Events: Yukarıdaki dokümantasyonda detaylı
 - TypeScript Types: `chat.types.ts` dosyasında tanımla
 

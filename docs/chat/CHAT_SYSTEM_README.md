@@ -25,9 +25,13 @@ Gerçek zamanlı (real-time) WebSocket tabanlı chat sisteminiz hazır!
 
 ### Dokümantasyon
 ```
+docs/chat/
 ├── CHAT_SYSTEM_DOCUMENTATION.md            # Teknik dokümantasyon (Backend)
-├── FRONTEND_CHAT_PROMPT.md                 # Frontend Cursor prompt
+├── CHAT_SERVICES_ARCHITECTURE.md           # Servis mimarisi
 └── CHAT_SYSTEM_README.md                   # Bu dosya (özet)
+
+docs/frontend/
+└── FRONTEND_CHAT_PROMPT.md                 # Frontend Cursor prompt
 ```
 
 ---
@@ -155,11 +159,11 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ## 🎨 Frontend Entegrasyonu
 
 ### Adım 1: Dokümantasyonu İncele
-1. **Backend API**: `CHAT_SYSTEM_DOCUMENTATION.md`
-2. **Frontend Prompt**: `FRONTEND_CHAT_PROMPT.md`
+1. **Backend API**: `docs/chat/CHAT_SYSTEM_DOCUMENTATION.md`
+2. **Frontend Prompt**: `docs/frontend/FRONTEND_CHAT_PROMPT.md`
 
 ### Adım 2: Frontend Cursor'a Prompt Ver
-`FRONTEND_CHAT_PROMPT.md` dosyasını frontend Cursor'unuza verin:
+`docs/frontend/FRONTEND_CHAT_PROMPT.md` dosyasını frontend Cursor'unuza verin:
 
 ```
 Bu dosyadaki talimatları kullanarak React/Next.js tabanlı 
@@ -278,9 +282,9 @@ DEBUG=socket.io:* npm start
 
 | Dosya | İçerik |
 |-------|--------|
-| `CHAT_SYSTEM_DOCUMENTATION.md` | Backend API, WebSocket events, HTTP endpoints |
-| `FRONTEND_CHAT_PROMPT.md` | Frontend Cursor için kapsamlı prompt |
-| `CHAT_SYSTEM_README.md` | Bu dosya (genel özet) |
+| `docs/chat/CHAT_SYSTEM_DOCUMENTATION.md` | Backend API, WebSocket events, HTTP endpoints |
+| `docs/frontend/FRONTEND_CHAT_PROMPT.md` | Frontend Cursor için kapsamlı prompt |
+| `docs/chat/CHAT_SYSTEM_README.md` | Bu dosya (genel özet) |
 
 ---
 
@@ -316,7 +320,7 @@ REDIS_PASSWORD=...
 
 ## 🎯 Sonraki Adımlar
 
-1. ✅ **Frontend Entegrasyonu**: `FRONTEND_CHAT_PROMPT.md` kullanarak frontend'i oluşturun
+1. ✅ **Frontend Entegrasyonu**: `docs/frontend/FRONTEND_CHAT_PROMPT.md` kullanarak frontend'i oluşturun
 2. ✅ **Test**: Yukarıdaki test senaryolarını çalıştırın
 3. ✅ **Deploy**: Render.com'a deploy edin
 4. ✅ **Monitoring**: Socket.IO stats'ları izleyin
@@ -336,5 +340,5 @@ Sorun yaşarsanız:
 
 Modern, gerçek zamanlı chat sisteminiz hazır! 🚀
 
-**Önemli**: Frontend entegrasyonu için `FRONTEND_CHAT_PROMPT.md` dosyasını kullanın.
+**Önemli**: Frontend entegrasyonu için `docs/frontend/FRONTEND_CHAT_PROMPT.md` dosyasını kullanın.
 
