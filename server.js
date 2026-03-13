@@ -66,6 +66,16 @@ const digerDetayRoutes      = require("./routes/digerTalepDetay.routes");
 const takvimRoutes      = require("./routes/takvim.routes");
 
 // ---- Route mounts ----
+// Health check (auth gerektirmez)
+app.get("/api/health", (req, res) => {
+  const dbOk = mongoose.connection.readyState === 1;
+  res.status(200).json({
+    status: dbOk ? "OK" : "DEGRADED",
+    mongodb: dbOk ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // /api kökü
 app.use("/api", authRoutes);               // login/register vb.
 app.use("/api/otel", otelRoutes);
